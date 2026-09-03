@@ -1,0 +1,13 @@
+# Normalise line endings. Without this, files authored on Windows check out with
+# CRLF on the Linux CI runner, and `bash script.sh` fails with an unreadable
+# "\r: command not found".
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.sql  text eol=lf
+
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.pdf  binary

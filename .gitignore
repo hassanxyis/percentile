@@ -1,0 +1,39 @@
+# ── secrets ──────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# ── python ───────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── node / next ──────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+
+# ── data files we never commit ───────────────────────────────────────────
+# O*NET database exports are large and redistributable only under their
+# licence terms; each developer downloads them (plan R2, §6).
+data/onet/*.csv
+data/onet/*.txt
+
+# ── local tooling ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
