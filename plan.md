@@ -610,6 +610,15 @@ Unchanged from v1: `for update skip locked` claiming, five-minute cron via GitHu
 with backoff up to 5 attempts then `failed` + alert. New job kinds: `notify_psychologist` (fires
 once when a session enters `pending_review`) and `review_reminder` (the 5-day nudge from §9.4).
 
+**Constraint on the `invite` email, settled in M5.** The `send_email` job that M5 enqueues carries
+`{template: 'invite', participant_id}` and deliberately **not** the token: `jobs` rows are retried,
+logged, and copied into `last_error` on failure, which is no place for a live credential to a
+minor's record. Only `sha256(token)` is ever stored, so the handler *cannot* reconstruct the
+original link. It must therefore **mint a fresh token at send time**, update
+`participants.invite_token_hash`, and email that. Any link produced by M5's one-time download
+stops working at that moment — correct precedence, since the emailed invite is the one the student
+actually receives. See `db/migrations/0005_import_roster.sql`.
+
 ---
 
 ## 13. Web application

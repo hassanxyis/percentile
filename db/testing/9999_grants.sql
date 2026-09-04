@@ -19,10 +19,23 @@ grant usage on schema public to anon, authenticated, service_role;
 grant select on all tables in schema public to anon, authenticated;
 grant all    on all tables in schema public to service_role;
 
--- `authenticated` needs execute on auth_organisation_id() and
--- review_progress_for_session(); 0002/0003 already grant those two explicitly.
--- This is the blanket equivalent for anything added later.
-grant execute on all functions in schema public to authenticated, service_role;
+-- Functions are granted BY NAME, never with a blanket
+-- `grant execute on all functions ... to authenticated`.
+--
+-- That blanket form runs after every migration and would silently re-grant
+-- whatever a migration had just revoked. `0005_import_roster.sql` revokes
+-- execute on `import_roster()` from `authenticated` precisely because the
+-- function takes `p_organisation_id` as an argument — an authenticated caller
+-- reaching it directly could pass another school's id. A blanket grant here
+-- would hand that back and the harness would stop reflecting production.
+--
+-- 0002/0003 already grant these two to `authenticated` themselves; repeating it
+-- is harmless and keeps the intent visible in one place.
+grant execute on function auth_organisation_id() to authenticated;
+grant execute on function review_progress_for_session(uuid) to authenticated;
+
+-- The service role legitimately runs everything, including import_roster().
+grant execute on all functions in schema public to service_role;
 
 -- Deliberately absent: `alter table ... force row level security`. The tables
 -- are owned by the connection that applied the migrations, and that same

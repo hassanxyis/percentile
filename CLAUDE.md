@@ -76,6 +76,7 @@ Web (`web/`):
 pnpm dev
 pnpm build
 pnpm lint
+pnpm test                     # vitest, unit tests for the pure modules in lib/
 ```
 
 Repo root:
@@ -214,6 +215,35 @@ touching consent, retention, deletion or anything that sends data outward.
 - **Statistical honesty (`plan.md` §9):** never print a percentage on a denominator below 10
   without the denominator beside it; never compare cohorts without both `n`s; the report says
   "classed misaligned by this instrument", never "in the wrong field".
+
+## The roster CSV and `intended_field`
+
+plan.md says the roster format is "unchanged from v1 §12", and **the v1 document is not in this
+repository** — so the format was decided in M5 and lives in `web/lib/roster-csv.ts`:
+`full_name` and `email` required, `external_ref`/`intended_field`/`education_level` optional,
+unknown columns ignored, `utf-8-sig` (Excel writes a BOM).
+
+Two behaviours there are deliberate and easy to "fix" into something worse:
+
+- **Every row error is collected, not just the first.** `load_instruments.py` raises on the first
+  bad row because a malformed instrument file is a transcription bug; a roster is a human-typed
+  document, and one error per upload cycle is the experience M5's done-when exists to prevent.
+- **All-or-nothing.** A partial import leaves the counsellor working out which rows landed, and
+  re-uploading the corrected file then trips the duplicate check on the ones that did.
+
+`intended_field` is a controlled vocabulary in `web/lib/intended-fields.ts` (plan.md §20 item 4 —
+also inherited from the missing v1 doc, so the list there was chosen, not carried over). It is a
+starter list to revise with a counsellor before the pilot. It cannot be free text: M11's congruence
+rate groups on this column, and "pre-med" / "MBBS" / "Medicine" would arrive as three fields with
+an n of 1 each — which §9's statistical honesty rule then forbids reporting on.
+
+Roster import goes through `import_roster()` (`db/migrations/0005_import_roster.sql`), not through
+separate inserts. supabase-js speaks REST, so participants and jobs would otherwise be separate
+requests with no transaction: a half-import leaves students whose invite tokens are unrecoverable,
+because only `sha256(token)` is stored. The function is revoked from `authenticated` — it takes
+`p_organisation_id` as an argument, so a browser session reaching it directly could pass another
+school's id. `db/testing/9999_grants.sql` therefore grants functions **by name** rather than with a
+blanket `grant execute on all functions`, which would silently re-grant what that migration revokes.
 
 ## The database tests
 

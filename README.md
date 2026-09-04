@@ -63,6 +63,7 @@ python scripts/rescore_all.py --dry-run
 pnpm dev
 pnpm build
 pnpm lint
+pnpm test
 
 # db
 supabase db push

@@ -97,6 +97,11 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Unit tests for the pure modules in web/lib — currently the roster CSV
+      # parser, which is where M5's per-row validation behaviour is pinned down.
+      - name: Test
+        run: pnpm test
+
       - name: Build
         run: pnpm build
         env:

@@ -60,16 +60,18 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dash">
       ) : (
         <ul className="flex flex-col gap-2">
           {cohorts.map((cohort) => (
-            <li
-              key={cohort.id}
-              className="flex items-baseline justify-between rounded border border-black/10 px-4 py-3 dark:border-white/10"
-            >
-              <span className="font-medium">{cohort.name}</span>
-              <span className="text-xs text-black/50 dark:text-white/50">
-                {[cohort.education_level, cohort.intake_year]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
+            <li key={cohort.id}>
+              <Link
+                href={`/dash/cohorts/${cohort.id}`}
+                className="flex items-baseline justify-between rounded border border-black/10 px-4 py-3 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+              >
+                <span className="font-medium">{cohort.name}</span>
+                <span className="text-xs text-black/50 dark:text-white/50">
+                  {[cohort.education_level, cohort.intake_year]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </Link>
             </li>
           ))}
         </ul>
