@@ -1,7 +1,13 @@
+import Link from "next/link";
+
 /**
  * Marketing placeholder. Real copy lands with M12; this exists so M0's
  * "next build passes" milestone means something, and so the mandatory O*NET
  * attribution in the footer is on screen from day one (plan R6).
+ *
+ * The sign-in link is not decoration: without it nothing on the site reaches
+ * /login, and the counsellor dashboard is undiscoverable except by typing the
+ * URL. Students never sign in — they arrive on a tokenised link (§5, §13).
  */
 export default function Home() {
   return (
@@ -14,6 +20,12 @@ export default function Home() {
         act on.
       </p>
       <p className="text-sm text-black/50 dark:text-white/50">In development.</p>
+      <Link
+        href="/login"
+        className="self-start rounded bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
+      >
+        Counsellor sign in
+      </Link>
     </main>
   );
 }

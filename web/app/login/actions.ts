@@ -32,8 +32,12 @@ export async function login(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    // One message for "no such account" and "wrong password" alike — a
-    // distinguishable error tells an attacker which addresses are registered.
+    // The user still sees one message for "no such account" and "wrong
+    // password" alike — a distinguishable one tells an attacker which addresses
+    // are registered. But swallowing the cause entirely makes a misconfigured
+    // project (unconfirmed email, wrong keys, rate limit) indistinguishable
+    // from a typo, so log the real reason server-side where only we see it.
+    console.error("sign-in failed", { email, code: error.code, message: error.message });
     return { error: "Those details did not match an account." };
   }
 
