@@ -60,7 +60,7 @@ def test_organisation_row_is_self_only(conn: psycopg.Connection) -> None:
     """A user reads their own organisation and no other."""
     with harness.as_user(conn, harness.COUNSELLOR_A), conn.cursor() as cur:
         cur.execute("select id from organisations")
-        assert [row[0] for row in cur.fetchall()] == [harness.ORG_A]
+        assert harness.first_column(cur) == [harness.ORG_A]
 
 
 def test_profile_read_is_self_only(conn: psycopg.Connection) -> None:
@@ -72,7 +72,7 @@ def test_profile_read_is_self_only(conn: psycopg.Connection) -> None:
     """
     with harness.as_user(conn, harness.COUNSELLOR_A), conn.cursor() as cur:
         cur.execute("select id from profiles")
-        assert [row[0] for row in cur.fetchall()] == [harness.COUNSELLOR_A]
+        assert harness.first_column(cur) == [harness.COUNSELLOR_A]
 
 
 def test_reference_data_is_readable_by_any_authenticated_user(conn: psycopg.Connection) -> None:

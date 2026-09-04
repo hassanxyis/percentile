@@ -62,7 +62,7 @@ def test_psychologist_cannot_cross_organisations(conn: psycopg.Connection) -> No
         assert cur.fetchone() is None
 
         cur.execute("select session_id from reviews")
-        assert [row[0] for row in cur.fetchall()] == [harness.SESSION_B_CONFIRMED]
+        assert harness.first_column(cur) == [harness.SESSION_B_CONFIRMED]
 
 
 def test_counsellor_reads_progress_through_the_function(conn: psycopg.Connection) -> None:

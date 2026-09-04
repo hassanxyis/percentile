@@ -131,6 +131,17 @@ def count_as(conn: psycopg.Connection, profile_id: str, table: str) -> int:
         return cur.fetchone()[0]
 
 
+def first_column(cur: psycopg.Cursor) -> list[str]:
+    """Every row's first column, as strings.
+
+    psycopg maps a Postgres `uuid` column to `uuid.UUID`, not `str`, so
+    comparing a fetched id directly against the constants above fails on type
+    while the values are identical. Convert in one place rather than sprinkling
+    `str()` through the assertions.
+    """
+    return [str(row[0]) for row in cur.fetchall()]
+
+
 def make_session(
     conn: psycopg.Connection,
     organisation_id: str = ORG_A,
