@@ -61,9 +61,14 @@ Engine (`engine/`, Python 3.12 — the venv is not on PATH, invoke it explicitly
 .\.venv\Scripts\python.exe -m pytest                      # all tests
 .\.venv\Scripts\python.exe -m pytest tests/test_main.py    # one file
 .\.venv\Scripts\python.exe -m pytest -k reverse_keyed      # one test by name
+.\.venv\Scripts\python.exe -m pytest -m db                 # the Postgres tests only
+.\.venv\Scripts\python.exe -m pytest -m "not db"           # everything else
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
+
+The `db`-marked tests need `TEST_DATABASE_URL` (in `engine/.env` or the environment) and skip
+without it. See "The database tests" below before touching them.
 
 Web (`web/`):
 
@@ -116,7 +121,29 @@ returns 409 if `reviews.status != 'confirmed'`.
 `engine/app/scoring/*` takes raw responses in and returns score dicts — no database access
 inside those modules. That is what makes them testable offline and rescoreable in bulk.
 `engine.py` orchestrates and stamps `SCORING_ENGINE_VERSION` (in `app/config.py`); bump it
-whenever any rule changes.
+whenever any rule changes. `engine/app/matching/*` follows the same rule for the same reason:
+the occupation catalogue arrives as an argument, never through a query.
+
+### O*NET 31.0 does not match what plan.md §6.4 describes
+
+`plan.md` was written against an older release. Three differences, all of which read as bugs if
+you don't know about them:
+
+- **RIASEC moved.** There is no `interests.csv`; occupation interest profiles live in
+  `career_interest_types.csv` as elements `1.B.1.a`–`1.B.1.f` on scale ID `OI` (1..7). The same
+  file also carries `IH` high-point rows for `1.B.1.g`–`i` — a different measure, filtered out.
+- **Work Values is gone.** No `work_values.csv`, no `1.B.2.*` element anywhere in the release. The
+  six `occupations.value_*` columns are therefore permanently NULL. Nothing reads them, so they
+  are left in place rather than dropped (migrations are append-only).
+- **There is no Job Zone 1.** It was merged into a combined "Job Zone 1-2" band coded `2`, so §8's
+  `matric → [1,2,3]` is implemented as `[2,3]`. Same behaviour, no dead value.
+
+**Occupation match score is interest-only cosine**, not v1's `0.70 * interest + 0.30 * values`.
+The values term measured the Work Importance Locator, which v2 retired (§19), and §7.3/§8 keep
+GET2 deliberately out of the cosine — it measures tendency to act, not interest content. With no
+student values vector and no occupation values data, that term has no operand on either side.
+GET2 reaches matching only as `entrepreneurial_flag`, which adds up to 3 separately labelled
+entrepreneurship-track occupations and never reweights the ranking.
 
 `app/config.py` also holds `TEMPLATE_VERSION`, stamped onto every `reports` row so old PDFs
 stay reproducible after a template change.
@@ -138,8 +165,27 @@ Students are never authenticated. The taker flow reaches the database only throu
 actions that resolve `sha256(token) → participants.invite_token_hash` using the service
 role. **Those actions must never accept a `participant_id` from the client — only a token.**
 
+Writes never use the RLS-bound client. `0002_rls.sql` grants authenticated users SELECT and
+nothing else, so every insert and update runs through the service role in a server action
+(`web/lib/supabase/admin.ts`). What replaces the RLS those writes bypass is one rule, and it is
+the same shape as the taker-token rule above: **`organisation_id` comes from `verifySession()`,
+never from a form field.** A server action is reachable by direct POST, so an `organisation_id`
+in a `FormData` would let any authenticated counsellor write into any school's records.
+
+Reads go the other way — through `web/lib/supabase/server.ts`, with RLS applied — so the
+dashboard exercises the same policies the tests assert. A policy regression then shows up as an
+empty dashboard rather than a silent cross-tenant leak.
+
+Accounts are invite-only (`web/app/dash/settings/actions.ts`). There is no signup page and no
+`handle_new_user` trigger on `auth.users`, because either would have to guess `organisation_id`
+and `role` — and `role` is what gates `reviews.interview_notes`, the notes about a minor that §16
+says to treat like health data. An institution's first admin is seeded by hand.
+
 `db/migrations/0002_rls.sql` enables RLS on all sixteen v1 tables; `0003_reviews.sql` adds
 three more (`reviews`, `review_events`, `career_directions`) plus a `psychologist` role.
+`0004_r9_trigger_update.sql` widens the R9 trigger to `before insert or update` — 0003 created it
+`before insert` only, which left `update reports set kind='student', session_id=<unreviewed>`
+open. Appendix B states R9 as an invariant over rows, not over inserts.
 `jobs` and `audit_log` deliberately have no policy at all: RLS denies by default, so the
 service role keeps sole access. That silence is intentional — do not add a policy there
 without writing down why.
@@ -157,8 +203,10 @@ touching consent, retention, deletion or anything that sends data outward.
 ## Conventions
 
 - **Migrations are append-only.** Never edit one that has run; add a new file.
-- **`data/onet/*.csv` is gitignored** — large, and redistributable only under O*NET's terms.
-  Each developer downloads it locally via `scripts/load_onet.py`.
+- **`data/onet/**` is gitignored** — large, and redistributable only under O*NET's terms. Each
+  developer downloads the CSV archive from onetcenter.org and extracts it there; the archive
+  creates its own versioned subdirectory (`db_31_0_csv/`), which is why the ignore rules use
+  `**`. `scripts/load_onet.py` globs for that directory rather than pinning a release.
 - **`.gitattributes` forces LF.** Without it, `check-service-role.sh` authored on Windows
   fails on the Linux runner with an unreadable `\r: command not found`.
 - **Charts are hand-written SVG** in `engine/app/report/charts.py`. No plotting library —
@@ -167,12 +215,53 @@ touching consent, retention, deletion or anything that sends data outward.
   without the denominator beside it; never compare cohorts without both `n`s; the report says
   "classed misaligned by this instrument", never "in the wrong field".
 
+## The database tests
+
+`engine/tests/db/` applies the migrations to a real Postgres and asserts the R9 trigger and the
+RLS policies. They skip unless `TEST_DATABASE_URL` is set; CI always sets it, so CI is where they
+actually run. **The harness runs `drop schema public cascade`** — a throwaway database only.
+
+`db/testing/` holds an `auth`-schema shim and the GRANTs that Supabase provides by default.
+Nothing there is a migration: it is never applied to Supabase and is exempt from the append-only
+rule. The grants are load-bearing for correctness, not convenience — without them a query returns
+*permission denied* rather than *zero rows*, and a test asserting "this role sees nothing" passes
+for the wrong reason.
+
+Three things about this harness will look wrong and are not:
+
+- **`set local role authenticated` in `as_user()`.** Postgres skips RLS for superusers, BYPASSRLS
+  roles and the table owner, and the test connection is all three. Without that line every RLS
+  assertion passes while testing nothing. `test_rls_is_enforced_at_all` is the canary that fails
+  loudly if it breaks; do not delete it.
+- **`insert_student_report()` deliberately does not use `as_user`.**
+  `enforce_review_before_student_report()` is SECURITY INVOKER, so its `select 1 from reviews` is
+  itself subject to `reviews` RLS. Wrap that insert in `as_user` and even a genuinely confirmed
+  review gets filtered to zero rows, producing a spurious "R9 violation" that looks like the
+  trigger working. In production the writer is the service role, which bypasses RLS.
+- **`reports` is seeded after `reviews` in `demo_org.sql`.** Reorder it and the seed fails with
+  "R9 violation" — that is the trigger, not a bug in the seed.
+
+The R9 tests build their own rows; the RLS tests read the seed. That split is deliberate: the
+"blocks" case needs a session with *no* review, and if it read seed state a later seed change that
+added one would silently flip it to a false pass.
+
 ## Next.js version warning
 
 `web/` runs Next.js 16, which has breaking changes against most training data. Read the
 relevant guide in `web/node_modules/next/dist/docs/` before writing web code. `next dev`
 regenerates `web/AGENTS.md` and `web/CLAUDE.md` — commit them with your work rather than
 reverting them.
+
+The one that bites hardest: **`middleware.ts` is deprecated and renamed `proxy.ts`**, exporting a
+function called `proxy`. Every Supabase "Next.js middleware" snippet in circulation uses the old
+name. Proxy also defaults to the Node.js runtime now, and setting `runtime` inside that file
+throws.
+
+`proxy.ts` refreshes the auth token and bounces unauthenticated traffic away from `/dash` and
+`/review`, but it is **not** the security boundary — it runs on prefetches and must not query the
+database. Authorisation lives in `web/lib/dal.ts`, next to the data, and ultimately in the RLS
+policies. Auth checks do not belong in a layout either: Next's own guidance is that a layout
+"does not control whether the rest of the route renders".
 
 ## WeasyPrint
 

@@ -11,8 +11,10 @@ rules exist because breaking them destroys the product's credibility.
 ## Layout
 
 ```
-.github/workflows/   ci.yml (lint + tests) · tick.yml (cron → engine)
+.github/workflows/   ci.yml (lint + tests) · tick.yml (cron → engine) · keepalive.yml
 db/migrations/       ordered SQL; never edit one that has run
+db/testing/          auth-schema shim + grants for the test harness — NOT migrations
+db/seed/             demo_org.sql, the two-organisation world the DB tests read
 data/instruments/    downloaded item files — not generated (R2)
 data/onet/           O*NET database export — gitignored, download locally
 data/local/          pk_occupation_map.csv, the localisation layer
@@ -65,6 +67,32 @@ pnpm lint
 # db
 supabase db push
 ```
+
+## Database tests
+
+The R9 trigger and the row-level security policies are enforced by Postgres, not by Python, so
+they are tested against a real server. Those tests skip unless `TEST_DATABASE_URL` is set, which
+keeps `pytest` fast and Docker-free by default.
+
+```powershell
+docker run -d --name pg-test -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
+
+# in engine/.env, or as an environment variable
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
+
+cd engine
+.\.venv\Scripts\python.exe -m pytest -m db       # just these
+.\.venv\Scripts\python.exe -m pytest -m "not db" # everything else
+```
+
+**The harness runs `drop schema public cascade`.** Point it at a throwaway database only.
+
+It applies `db/testing/0000_supabase_shim.sql` (the `auth` schema, `auth.uid()`, and the
+`anon`/`authenticated`/`service_role` roles that Supabase provides and a plain container does
+not), then every migration in order, then `db/testing/9999_grants.sql`, then the seed. CI does the
+same against a `postgres:16` service container — see `.github/workflows/ci.yml`.
+
+Nothing in `db/testing/` is a migration; see its README.
 
 ## Architecture in one paragraph
 

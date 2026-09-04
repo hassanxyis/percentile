@@ -19,6 +19,16 @@ report() {
   fail=1
 }
 
+# Source only. `.next/` and `node_modules/` are generated or vendored, and
+# neither is committed. Scanning them locally produces false positives that
+# train you to ignore this script — minified SSR chunks legitimately contain
+# `process.env.SUPABASE_SERVICE_ROLE_KEY`, and minification collapses whole
+# modules onto one line so unrelated identifiers end up adjacent.
+#
+# CI checks out a clean tree where neither directory exists, so this changes
+# nothing there; it keeps a local run honest.
+EXCLUDES=(--exclude-dir=.next --exclude-dir=node_modules)
+
 # ── 1. NEXT_PUBLIC_ must never carry the service-role key ────────────────────
 # Matches NEXT_PUBLIC_…SERVICE_ROLE… in either order, anywhere in web/ or db/.
 if matches=$(grep -rniE \
@@ -26,6 +36,7 @@ if matches=$(grep -rniE \
       -e 'SERVICE_ROLE[A-Z0-9_]*.*NEXT_PUBLIC_' \
       --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' \
       --include='*.mjs' --include='*.env*' \
+      "${EXCLUDES[@]}" \
       web/ 2>/dev/null); then
   report "Service-role key exposed through a NEXT_PUBLIC_ variable:"
   echo "$matches"
@@ -46,6 +57,7 @@ while IFS= read -r file; do
   esac
 done < <(grep -rlE 'SERVICE_ROLE' \
            --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' \
+           "${EXCLUDES[@]}" \
            web/ 2>/dev/null || true)
 
 if [ "$fail" -eq 0 ]; then

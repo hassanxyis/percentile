@@ -30,11 +30,14 @@ next-env.d.ts
 # terms; each developer downloads them directly (plan R2, §6). The derived,
 # hand-transcribed CSVs in data/instruments/ ARE committed — that transcription
 # is the auditable artifact R2 cares about, not the original PDF/HTML.
-data/onet/*.csv
-data/onet/*.txt
-data/onet/*.pdf
-data/onet/*.html
-data/onet/*.zip
+#
+# The `**` matters: the O*NET archive extracts into a versioned subdirectory
+# (db_31_0_csv/), so a rule anchored at data/onet/ alone misses all 46 files.
+data/onet/**/*.csv
+data/onet/**/*.txt
+data/onet/**/*.pdf
+data/onet/**/*.html
+data/onet/**/*.zip
 
 # ── local tooling ────────────────────────────────────────────────────────
 .DS_Store

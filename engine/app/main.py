@@ -1,12 +1,16 @@
 """FastAPI application. The engine is private: every route except /health requires
 the shared secret, and nothing here is ever called from a browser (plan §10)."""
 
+import logging
 import secrets
+from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
 
 from app.config import SCORING_ENGINE_VERSION, TEMPLATE_VERSION, Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Percentile Engine", version=SCORING_ENGINE_VERSION)
 
@@ -27,10 +31,49 @@ def require_engine_key(
         )
 
 
+def check_database() -> None:
+    """Read one row, to prove Postgres is reachable. Raises on any failure.
+
+    `organisations` is the smallest tenant table and is never empty in a real
+    deployment; `limit(1)` keeps this to a single row regardless.
+    """
+    from app.db import get_client
+
+    get_client().table("organisations").select("id").limit(1).execute()
+
+
+def get_database_check() -> Callable[[], None]:
+    """Supply the health probe's database check.
+
+    Indirection exists so tests can override the check via
+    `app.dependency_overrides` — the same idiom `test_main.py` already uses for
+    `get_settings` — rather than needing live Supabase credentials to assert
+    that `/health` is open.
+    """
+    return check_database
+
+
 @app.get("/health")
-def health() -> dict:
-    """Liveness. Will also touch Postgres once db.py lands, which is what keeps the
-    Supabase free project from pausing after 7 days idle (plan §2)."""
+def health(
+    response: Response,
+    db_check: Annotated[Callable[[], None], Depends(get_database_check)],
+) -> dict:
+    """Liveness, and the keep-alive.
+
+    The Postgres touch is the point, not a bonus: a Supabase free project pauses
+    after 7 days idle, and between now and the job runner (M7) nothing else
+    connects. `.github/workflows/keepalive.yml` calls this daily (plan §2, §11).
+
+    A failure reports 503, not 200. A liveness probe that says "ok" while the
+    database is unreachable is worse than no probe — it would keep the project
+    alive while hiding that every job was failing.
+    """
+    try:
+        db_check()
+    except Exception:
+        logger.exception("health check could not reach Postgres")
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "degraded"}
     return {"status": "ok"}
 
 

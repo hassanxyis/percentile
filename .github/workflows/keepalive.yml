@@ -1,0 +1,29 @@
+name: keepalive
+
+# A Supabase free project pauses after 7 days of inactivity, and until the job
+# runner lands (M7) nothing else connects to it. GET /health reads one row, so a
+# daily call is enough to keep the project awake (plan §2, §11).
+#
+# tick.yml runs every five minutes but POSTs /tick, which does not exist yet —
+# this is the workflow that actually holds the database open in the meantime.
+#
+# /health is the one route that does not require X-Engine-Key (plan §11), so no
+# secret beyond the base URL is needed here.
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Touch the database through the engine
+        # --retry-connrefused because the first request may be waking a sleeping
+        # free-tier host. --fail-with-body so a 503 ("degraded") fails the run
+        # and shows why, rather than passing silently.
+        run: |
+          curl -sS -m 120 "$ENGINE_BASE_URL/health" \
+            --retry 3 --retry-connrefused --fail-with-body
+        env:
+          ENGINE_BASE_URL: ${{ secrets.ENGINE_BASE_URL }}

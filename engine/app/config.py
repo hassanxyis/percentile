@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:3000"
     log_level: str = "INFO"
 
+    # Tests only. A direct Postgres connection string for engine/tests/db/, which
+    # assert the R9 trigger and the RLS policies against a real server — things
+    # the Supabase REST client above cannot express. Empty in every deployment;
+    # the application never reads it.
+    test_database_url: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

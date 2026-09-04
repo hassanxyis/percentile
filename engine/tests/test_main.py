@@ -4,9 +4,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
-from app.main import app
+from app.main import app, get_database_check
 
 TEST_SECRET = "test-secret-do-not-use-in-production"
+
+
+def _reachable() -> None:
+    """Stand-in for a healthy database."""
+
+
+def _unreachable() -> None:
+    raise ConnectionError("postgres is down")
 
 
 @pytest.fixture
@@ -14,6 +22,9 @@ def client() -> TestClient:
     app.dependency_overrides[get_settings] = lambda: Settings(
         engine_shared_secret=TEST_SECRET
     )
+    # /health reads from Postgres (it is the keep-alive, plan §2). Override the
+    # check rather than requiring live Supabase credentials to run the suite.
+    app.dependency_overrides[get_database_check] = lambda: _reachable
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -22,6 +33,17 @@ def test_health_is_open(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_health_reports_degraded_when_database_is_unreachable(client: TestClient) -> None:
+    """A probe that says "ok" while Postgres is down keeps the project alive and
+    hides that every job is failing. Report 503 instead."""
+    app.dependency_overrides[get_database_check] = lambda: _unreachable
+
+    response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "degraded"}
 
 
 def test_version_requires_key(client: TestClient) -> None:

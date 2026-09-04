@@ -22,6 +22,10 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "ruff>=0.7",
+    # Only the tests use this. The application talks to Supabase over its REST
+    # API (app/db.py); the RLS and trigger tests need a raw connection so they
+    # can `set local role` and impersonate, which REST cannot express.
+    "psycopg[binary]>=3.2",
 ]
 
 [build-system]
@@ -37,6 +41,9 @@ app = ["report/templates/*", "content/*.yaml"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "db: needs a live Postgres via TEST_DATABASE_URL; skipped when unset",
+]
 
 [tool.ruff]
 target-version = "py312"
