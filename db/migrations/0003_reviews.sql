@@ -136,7 +136,7 @@ create policy reviews_psychologist_read on reviews
   using (
     exists (
       select 1 from profiles p
-      where p.id = auth.id()
+      where p.id = auth.uid()
         and p.role in ('psychologist', 'org_admin', 'superadmin')
         and p.organisation_id = auth_organisation_id()
     )
@@ -179,7 +179,7 @@ create policy review_events_psychologist_read on review_events
   using (
     exists (
       select 1 from profiles p
-      where p.id = auth.id()
+      where p.id = auth.uid()
         and p.role in ('psychologist', 'org_admin', 'superadmin')
         and p.organisation_id = auth_organisation_id()
     )
@@ -198,7 +198,7 @@ create policy career_directions_psychologist_read on career_directions
   using (
     exists (
       select 1 from profiles p
-      where p.id = auth.id()
+      where p.id = auth.uid()
         and p.role in ('psychologist', 'org_admin', 'superadmin')
         and p.organisation_id = auth_organisation_id()
     )

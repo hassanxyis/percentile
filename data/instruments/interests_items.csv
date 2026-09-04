@@ -1,0 +1,61 @@
+code,ordinal,text,scale,response_min,response_max,reverse_keyed
+IP_R_01,1,"Build kitchen cabinets",R,0,1,false
+IP_R_02,2,"Drive a truck to deliver packages to offices and homes",R,0,1,false
+IP_R_03,3,"Lay brick or tile",R,0,1,false
+IP_R_04,4,"Test the quality of parts before shipment",R,0,1,false
+IP_R_05,5,"Repair household appliances",R,0,1,false
+IP_R_06,6,"Repair and install locks",R,0,1,false
+IP_R_07,7,"Raise fish in a fish hatchery",R,0,1,false
+IP_R_08,8,"Set up and operate machines to make products",R,0,1,false
+IP_R_09,9,"Assemble electronic parts",R,0,1,false
+IP_R_10,10,"Put out forest fires",R,0,1,false
+IP_I_01,11,"Develop a new medicine",I,0,1,false
+IP_I_02,12,"Investigate the cause of a fire",I,0,1,false
+IP_I_03,13,"Study ways to reduce water pollution",I,0,1,false
+IP_I_04,14,"Develop a way to better predict the weather",I,0,1,false
+IP_I_05,15,"Conduct chemical experiments",I,0,1,false
+IP_I_06,16,"Work in a biology lab",I,0,1,false
+IP_I_07,17,"Study the movement of planets",I,0,1,false
+IP_I_08,18,"Invent a replacement for sugar",I,0,1,false
+IP_I_09,19,"Examine blood samples using a microscope",I,0,1,false
+IP_I_10,20,"Do laboratory tests to identify diseases",I,0,1,false
+IP_A_01,21,"Write books or plays",A,0,1,false
+IP_A_02,22,"Paint sets for plays",A,0,1,false
+IP_A_03,23,"Play a musical instrument",A,0,1,false
+IP_A_04,24,"Write scripts for movies or television shows",A,0,1,false
+IP_A_05,25,"Compose or arrange music",A,0,1,false
+IP_A_06,26,"Perform jazz or tap dance",A,0,1,false
+IP_A_07,27,"Draw pictures",A,0,1,false
+IP_A_08,28,"Sing in a band",A,0,1,false
+IP_A_09,29,"Create special effects for movies",A,0,1,false
+IP_A_10,30,"Edit movies",A,0,1,false
+IP_S_01,31,"Teach an individual an exercise routine",S,0,1,false
+IP_S_02,32,"Teach children how to play sports",S,0,1,false
+IP_S_03,33,"Help people with personal or emotional problems",S,0,1,false
+IP_S_04,34,"Teach sign language to people who are deaf or hard of hearing",S,0,1,false
+IP_S_05,35,"Give career guidance to people",S,0,1,false
+IP_S_06,36,"Help conduct a group therapy session",S,0,1,false
+IP_S_07,37,"Perform rehabilitation therapy",S,0,1,false
+IP_S_08,38,"Take care of children at a day-care center",S,0,1,false
+IP_S_09,39,"Do volunteer work at a non-profit organization",S,0,1,false
+IP_S_10,40,"Teach a high-school class",S,0,1,false
+IP_E_01,41,"Buy and sell stocks and bonds",E,0,1,false
+IP_E_02,42,"Negotiate business contracts",E,0,1,false
+IP_E_03,43,"Manage a retail store",E,0,1,false
+IP_E_04,44,"Represent a client in a lawsuit",E,0,1,false
+IP_E_05,45,"Operate a beauty salon or barber shop",E,0,1,false
+IP_E_06,46,"Market a new line of clothing",E,0,1,false
+IP_E_07,47,"Manage a department within a large company",E,0,1,false
+IP_E_08,48,"Sell merchandise at a department store",E,0,1,false
+IP_E_09,49,"Start your own business",E,0,1,false
+IP_E_10,50,"Manage a clothing store",E,0,1,false
+IP_C_01,51,"Develop a spreadsheet using computer software",C,0,1,false
+IP_C_02,52,"Calculate the wages of employees",C,0,1,false
+IP_C_03,53,"Proofread records or forms",C,0,1,false
+IP_C_04,54,"Inventory supplies using a hand-held computer",C,0,1,false
+IP_C_05,55,"Install software across computers on a large network",C,0,1,false
+IP_C_06,56,"Record rent payments",C,0,1,false
+IP_C_07,57,"Operate a calculator",C,0,1,false
+IP_C_08,58,"Keep inventory records",C,0,1,false
+IP_C_09,59,"Keep shipping and receiving records",C,0,1,false
+IP_C_10,60,"Stamp, sort, and distribute mail for an organization",C,0,1,false

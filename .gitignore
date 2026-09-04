@@ -26,10 +26,15 @@ out/
 next-env.d.ts
 
 # ── data files we never commit ───────────────────────────────────────────
-# O*NET database exports are large and redistributable only under their
-# licence terms; each developer downloads them (plan R2, §6).
+# O*NET/IPIP source downloads are redistributable only under their licence
+# terms; each developer downloads them directly (plan R2, §6). The derived,
+# hand-transcribed CSVs in data/instruments/ ARE committed — that transcription
+# is the auditable artifact R2 cares about, not the original PDF/HTML.
 data/onet/*.csv
 data/onet/*.txt
+data/onet/*.pdf
+data/onet/*.html
+data/onet/*.zip
 
 # ── local tooling ────────────────────────────────────────────────────────
 .DS_Store

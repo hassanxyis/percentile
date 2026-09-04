@@ -1,7 +1,11 @@
 """RIASEC interest scoring (plan §7.1).
 
-O*NET Interest Profiler Short Form: 60 items, 10 per scale, 0..4 each, so every
-scale scores 0..40.
+O*NET Interest Profiler Short Form: 60 checkbox items, 10 per scale. The
+respondent checks activities they would like to do; each scale's score is
+simply its count of checks, so every scale scores 0..10 (R2 — verified
+against the published instrument sheet, not assumed: "Place a check in the
+box by the activities you would like to do... Count the number of checks for
+each shaded section").
 """
 
 from app.scoring.types import Item, ScoringError
@@ -11,9 +15,15 @@ from app.scoring.types import Item, ScoringError
 # always produce the same code.
 RIASEC = ("R", "I", "A", "S", "E", "C")
 
-# Differentiation bands. Report copy changes on these — they are not decoration.
-WELL_DIFFERENTIATED_MIN = 20
-MODERATE_MIN = 10
+# Differentiation bands. Report copy changes on these — they are not
+# decoration, but they are also not an O*NET-published cutoff: the source
+# instrument sheet gives no interpretive banding, only the checkbox count.
+# These are scaled proportionally from the same 50%/25%-of-range split used
+# before the 0..40 -> 0..10 correction, and should be validated against
+# real response data (or an official O*NET interpretive guide, if one
+# surfaces) before they drive report copy for a paying cohort.
+WELL_DIFFERENTIATED_MIN = 5   # half the 0..10 range
+MODERATE_MIN = 3              # roughly a quarter of the range
 
 # Below this gap between the third and fourth scale, the third letter of the
 # code is not meaningfully distinct from the one that lost.
@@ -24,7 +34,7 @@ def score_interests(responses: dict[str, int], items: list[Item]) -> dict:
     """Score the interest module.
 
     Args:
-        responses: {item_code: 0..4}. Must contain every item in `items`.
+        responses: {item_code: 0 or 1}. Must contain every item in `items`.
         items: the interest instrument's items, carrying scale and response range.
 
     Returns a dict with raw scores, the three-letter Holland code, a

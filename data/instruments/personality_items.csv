@@ -1,0 +1,51 @@
+code,ordinal,text,scale,response_min,response_max,reverse_keyed
+IPIP_E_01,1,"Am the life of the party.",E,1,5,false
+IPIP_A_01,2,"Feel little concern for others.",A,1,5,true
+IPIP_C_01,3,"Am always prepared.",C,1,5,false
+IPIP_S_01,4,"Get stressed out easily.",S,1,5,true
+IPIP_O_01,5,"Have a rich vocabulary.",O,1,5,false
+IPIP_E_02,6,"Don't talk a lot.",E,1,5,true
+IPIP_A_02,7,"Am interested in people.",A,1,5,false
+IPIP_C_02,8,"Leave my belongings around.",C,1,5,true
+IPIP_S_02,9,"Am relaxed most of the time.",S,1,5,false
+IPIP_O_02,10,"Have difficulty understanding abstract ideas.",O,1,5,true
+IPIP_E_03,11,"Feel comfortable around people.",E,1,5,false
+IPIP_A_03,12,"Insult people.",A,1,5,true
+IPIP_C_03,13,"Pay attention to details.",C,1,5,false
+IPIP_S_03,14,"Worry about things.",S,1,5,true
+IPIP_O_03,15,"Have a vivid imagination.",O,1,5,false
+IPIP_E_04,16,"Keep in the background.",E,1,5,true
+IPIP_A_04,17,"Sympathize with others' feelings.",A,1,5,false
+IPIP_C_04,18,"Make a mess of things.",C,1,5,true
+IPIP_S_04,19,"Seldom feel blue.",S,1,5,false
+IPIP_O_04,20,"Am not interested in abstract ideas.",O,1,5,true
+IPIP_E_05,21,"Start conversations.",E,1,5,false
+IPIP_A_05,22,"Am not interested in other people's problems.",A,1,5,true
+IPIP_C_05,23,"Get chores done right away.",C,1,5,false
+IPIP_S_05,24,"Am easily disturbed.",S,1,5,true
+IPIP_O_05,25,"Have excellent ideas.",O,1,5,false
+IPIP_E_06,26,"Have little to say.",E,1,5,true
+IPIP_A_06,27,"Have a soft heart.",A,1,5,false
+IPIP_C_06,28,"Often forget to put things back in their proper place.",C,1,5,true
+IPIP_S_06,29,"Get upset easily.",S,1,5,true
+IPIP_O_06,30,"Do not have a good imagination.",O,1,5,true
+IPIP_E_07,31,"Talk to a lot of different people at parties.",E,1,5,false
+IPIP_A_07,32,"Am not really interested in others.",A,1,5,true
+IPIP_C_07,33,"Like order.",C,1,5,false
+IPIP_S_07,34,"Change my mood a lot.",S,1,5,true
+IPIP_O_07,35,"Am quick to understand things.",O,1,5,false
+IPIP_E_08,36,"Don't like to draw attention to myself.",E,1,5,true
+IPIP_A_08,37,"Take time out for others.",A,1,5,false
+IPIP_C_08,38,"Shirk my duties.",C,1,5,true
+IPIP_S_08,39,"Have frequent mood swings.",S,1,5,true
+IPIP_O_08,40,"Use difficult words.",O,1,5,false
+IPIP_E_09,41,"Don't mind being the center of attention.",E,1,5,false
+IPIP_A_09,42,"Feel others' emotions.",A,1,5,false
+IPIP_C_09,43,"Follow a schedule.",C,1,5,false
+IPIP_S_09,44,"Get irritated easily.",S,1,5,true
+IPIP_O_09,45,"Spend time reflecting on things.",O,1,5,false
+IPIP_E_10,46,"Am quiet around strangers.",E,1,5,true
+IPIP_A_10,47,"Make people feel at ease.",A,1,5,false
+IPIP_C_10,48,"Am exacting in my work.",C,1,5,false
+IPIP_S_10,49,"Often feel blue.",S,1,5,true
+IPIP_O_10,50,"Am full of ideas.",O,1,5,false

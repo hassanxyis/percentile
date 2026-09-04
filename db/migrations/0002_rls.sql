@@ -45,7 +45,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select organisation_id from profiles where id = auth.id();
+  select organisation_id from profiles where id = auth.uid();
 $$;
 
 revoke all on function auth_organisation_id() from public;
@@ -56,7 +56,7 @@ grant execute on function auth_organisation_id() to authenticated;
 -- the counsellor UI needs that, and it keeps the helper above non-recursive.
 create policy profiles_self_read on profiles
   for select to authenticated
-  using (id = auth.id());
+  using (id = auth.uid());
 
 create policy organisations_read on organisations
   for select to authenticated

@@ -14,7 +14,11 @@ from app.scoring.types import Item
 
 
 def interest_items(per_scale: int = 10) -> list[Item]:
-    """60 interest items, 10 per RIASEC scale, 0..4."""
+    """60 interest items, 10 per RIASEC scale, checkbox 0..1 (plan §6.1, §7.1).
+
+    The published instrument is a checkbox sheet, not a Likert scale: each
+    item is checked or not, and a scale's score is its count of checks.
+    """
     items = []
     ordinal = 1
     for scale in RIASEC:
@@ -27,7 +31,7 @@ def interest_items(per_scale: int = 10) -> list[Item]:
                     scale=scale,
                     reverse_keyed=False,
                     response_min=0,
-                    response_max=4,
+                    response_max=1,
                     instrument_code="interests",
                 )
             )
