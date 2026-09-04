@@ -1,18 +1,19 @@
 """Response-quality flags (plan §7.4).
 
-Flags appear only on the counsellor's copy of the report, never on the
-student's (R8 — and it is simply unkind). Two or more `warn` flags exclude a
-participant from cohort aggregates, and the cohort report must then state how
-many were excluded and why.
+Flags appear on the psychologist's review screen (§9.1) and the counsellor's
+copy of the cohort report, never on the student's own report. Two or more
+`warn` flags exclude a participant from cohort aggregates, and the cohort
+report must then state how many were excluded and why.
 
 A flag is a signal to talk to the student, never a verdict on them. Keep the
-`detail` strings factual and free of judgement — a counsellor may read one out.
+`detail` strings factual and free of judgement — a reviewer may read one out.
 """
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from statistics import median
 
+from app.scoring.get2 import GET2_SUBSCALES
 from app.scoring.personality import BIG_FIVE, reverse_if_keyed
 from app.scoring.types import Item
 
@@ -22,6 +23,7 @@ MIN_ACTIVE_SECONDS = 6 * 60    # total time spent on items
 MIN_MEDIAN_MS = 800            # median time per item
 INCONSISTENT_PAIR_DELTA = 1.5  # forward vs reverse-adjusted mean, per domain
 LONG_GAP_HOURS = 48
+GET2_UNIFORM_SPREAD = 5        # every subscale within this many points of each other
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,13 +42,14 @@ def compute_flags(
     ms_elapsed: dict[str, int] | None = None,
     started_at: datetime | None = None,
     submitted_at: datetime | None = None,
-    sort_used_fallback: bool = False,
+    get2_subscales: dict[str, int] | None = None,
 ) -> list[dict]:
     """Return flags for one session, ordered as listed in plan §7.4.
 
     Every argument except `responses` and `items` is optional, because a
-    rescore of an old session may not have timing data. A missing signal
-    produces no flag rather than a false one.
+    rescore of an old session may not have timing data, and `get2_subscales`
+    is None whenever the module was not administered (R10 fallback). A
+    missing signal produces no flag rather than a false one.
     """
     ordered = sorted(items, key=lambda i: (i.instrument_code, i.ordinal))
     flags: list[Flag] = []
@@ -56,7 +59,7 @@ def compute_flags(
         _too_fast(responses, ms_elapsed),
         _inconsistent_pairs(responses, items),
         _long_gap(started_at, submitted_at),
-        _incomplete_sort(sort_used_fallback),
+        _get2_uniform_response(get2_subscales),
     ):
         if check is not None:
             flags.append(check)
@@ -176,16 +179,26 @@ def _long_gap(started_at: datetime | None, submitted_at: datetime | None) -> Fla
     )
 
 
-def _incomplete_sort(sort_used_fallback: bool) -> Flag | None:
-    """The tap-to-place fallback is a first-class interface, not a failure.
+def _get2_uniform_response(get2_subscales: dict[str, int] | None) -> Flag | None:
+    """Every GET2 subscale landing within a few points of each other usually
+    means the respondent clicked through without engaging, rather than a
+    genuinely flat entrepreneurial profile (plan §7.4).
 
-    Recorded as info only, so the counsellor can read the card sort in context
-    if drag-and-drop was unavailable on the student's device.
+    None when GET2 was not administered — absence of the module is not a
+    quality signal.
     """
-    if not sort_used_fallback:
+    if not get2_subscales:
+        return None
+
+    values = [get2_subscales[s] for s in GET2_SUBSCALES if s in get2_subscales]
+    if len(values) < len(GET2_SUBSCALES):
+        return None
+
+    spread = max(values) - min(values)
+    if spread > GET2_UNIFORM_SPREAD:
         return None
     return Flag(
-        code="incomplete_sort",
-        severity="info",
-        detail="card sort completed with the tap-to-place fallback",
+        code="get2_uniform_response",
+        severity="warn",
+        detail=f"all five GET2 subscales within {spread} points of each other",
     )

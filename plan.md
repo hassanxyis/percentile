@@ -1,13 +1,23 @@
 # Percentile — Implementation Plan (v1)
 
-> **What this file is.** The complete build spec for Percentile v1. It is written to be handed
-> to a coding agent (Claude Code, Cursor) or followed by hand, milestone by milestone. Every
-> milestone has files to create, a definition of done, and a test that proves it.
+> **What this file is.** The complete build spec for Percentile v1 — the Phase 1 ("destination
+> identification") slice of the Clarity Compass vision: assessment, human-reviewed interpretation,
+> and a report, for institutions. It is written to be handed to a coding agent (Claude Code,
+> Cursor) or followed by hand, milestone by milestone. Every milestone has files to create, a
+> definition of done, and a test that proves it.
 >
 > **Read `## 0. Rules` before writing any code.** Several rules exist because breaking them
 > destroys the product's credibility, not because they are stylistic preferences.
 >
-> Status: v1 spec, September 2026. Owner: Syed Hassan Raza.
+> **v2 of this document.** Revised after two conversations with practising wellbeing counsellors
+> and against the "Clarity Compass" concept deck. Three changes from v1: the third assessment
+> module is GET2 (entrepreneurial tendency) instead of the retired Work Importance Locator; every
+> student's results go through a human counsellor/psychologist before a final report is issued,
+> not straight from engine to inbox; and the deck's Phase 2 — an AI-driven adaptive roadmap with
+> live rerouting and an LMS connector — is deliberately deferred to v2 (§21) rather than built now.
+> Read §19 for exactly what changed and why.
+>
+> Status: v2 spec, September 2026. Owner: Syed Hassan Raza.
 
 ---
 
@@ -22,17 +32,19 @@
 6. [Instrument data files](#6-instrument-data-files)
 7. [Scoring specification](#7-scoring-specification)
 8. [Occupation matching specification](#8-occupation-matching-specification)
-9. [Cohort analytics specification](#9-cohort-analytics-specification)
-10. [API contract](#10-api-contract)
-11. [Job runner and keep-alive](#11-job-runner-and-keep-alive)
-12. [Web application](#12-web-application)
-13. [Report specification](#13-report-specification)
-14. [Email](#14-email)
-15. [Privacy, consent and minors](#15-privacy-consent-and-minors)
-16. [Build order — milestones](#16-build-order--milestones)
-17. [Testing](#17-testing)
-18. [Deployment runbook](#18-deployment-runbook)
-19. [Open items needing a human decision](#19-open-items-needing-a-human-decision)
+9. [Psychologist review workflow](#9-psychologist-review-workflow)
+10. [Cohort analytics specification](#10-cohort-analytics-specification)
+11. [API contract](#11-api-contract)
+12. [Job runner and keep-alive](#12-job-runner-and-keep-alive)
+13. [Web application](#13-web-application)
+14. [Report specification](#14-report-specification)
+15. [Email](#15-email)
+16. [Privacy, consent and minors](#16-privacy-consent-and-minors)
+17. [Build order — milestones](#17-build-order--milestones)
+18. [Testing](#18-testing)
+19. [What changed in v2, and why](#19-what-changed-in-v2-and-why)
+20. [Open items needing a human decision](#20-open-items-needing-a-human-decision)
+21. [Deferred to v2 — Phase 2, the navigation engine](#21-deferred-to-v2--phase-2-the-navigation-engine)
 
 ---
 
@@ -45,16 +57,18 @@ be possible to rescore every historical session with one command. If that is not
 improvement orphans the norming sample.
 
 **R2 — Never invent instrument items.**
-The item text for the O*NET Interest Profiler and the Work Importance Locator comes from
-onetcenter.org. The IPIP items come from ipip.ori.org. Download them. Do not let any model
-generate, paraphrase, "improve" or reorder them. A paraphrased item is a different item with
-unknown properties, and every reliability figure you quote becomes a lie. All code in this repo
-reads items from data files (§6) and must work with an empty item table on day one.
+Interest Profiler items come from onetcenter.org, IPIP items from ipip.ori.org, GET2 items from
+Sally Caird's published guide (§6.3). Download or transcribe them. Do not let any model generate,
+paraphrase, "improve" or reorder them. A paraphrased item is a different item with unknown
+properties, and every reliability figure you quote becomes a lie. All code in this repo reads
+items from data files (§6) and must work with an empty item table on day one.
 
 **R3 — Interpretation text is written by a human with psychology training.**
-The differentiator of this product is that a trained person wrote the interpretations. Generated
+The differentiator of this product is that a trained person wrote the interpretations, and — new
+in v2 — a trained person reviews every individual result before it becomes a final report. Generated
 interpretation copy is not defensible in a room with a PhD in it. Use a model to draft *product*
-copy, error messages, and this documentation — never the report's interpretive content.
+copy, error messages, and this documentation — never the report's interpretive content, and never
+anything presented as the psychologist's own clinical judgement.
 
 **R4 — No percentiles until local norms exist.**
 Until the norm sample for a scale reaches n ≥ 300 for a defined population, reports show raw
@@ -67,51 +81,86 @@ an Urdu edition is in development. It may not ship one.
 
 **R6 — Attribution is mandatory.**
 Every report page and the site footer must credit O*NET and the U.S. Department of Labor,
-Employment and Training Administration, per the licence chosen in §6. If items are modified in
-any way, the O*NET developer licence applies: the modified version must be independently
-validated and marked as not USDOL-endorsed. Do not modify items in v1 — it converts a licence
-term into a research obligation.
+Employment and Training Administration (§6.1–6.2), and GET2's author, Dr. Sally Caird / The Open
+University (§6.3), per the terms each instrument is used under. If O*NET items are modified in any
+way, the O*NET developer licence applies: the modified version must be independently validated and
+marked as not USDOL-endorsed. Do not modify O*NET items in v1.
 
 **R7 — No clinical language.**
-This is a career interest and values instrument. It does not diagnose, screen, or assess mental
-health, ability or intelligence. Report copy, marketing copy and UI copy must never imply it does.
+This is a career interest, personality and entrepreneurial-tendency instrument suite. It does not
+diagnose, screen, or assess mental health, ability or intelligence. Report copy, marketing copy and
+UI copy must never imply it does — and the psychologist review step (§9) must never be described to
+students or parents as therapy, counselling for distress, or a clinical service. It is career
+guidance with a qualified human checking the machine's output.
 
 **R8 — Student results belong to the student.**
 Individual reports go to the student. Institutions receive aggregates plus, where the institution
 is the counsellor of record, the individual reports for their own cohort — disclosed to students
-before they start. Never a third party. See §15.
+before they start. Never a third party. See §16.
+
+**R9 — No final report leaves the system without human sign-off.**
+This is the central change in v2. `scores` and `occupation_matches` are machine output and are
+never emailed to a student directly. A session cannot reach `reports` (student kind) until a
+`reviews` row exists with `status = 'confirmed'` (§9). This is enforced in the database, not just
+in application code — see the trigger in §5. Treat any code path that bypasses this as a severity-1
+bug, not a shortcut.
+
+**R10 — GET2 use is provisional until permission is confirmed in writing.**
+GET2 was published by Dr. Sally Caird through The Open University for research and educational use,
+and a free public test exists at get2test.net, which reads as an invitation to use it — but no
+written commercial-use terms were found during scoping. Email the Open University / Dr. Caird
+before any paying institution sees a GET2-based report (M1, §20 item 1). Until that permission is
+confirmed, label GET2 output internally as "provisional — pending permission" and do not use it in
+sales material. If permission is refused or ignored past the pilot date, fall back to two modules
+(interests + personality) — the scoring and report code must not assume GET2 is guaranteed to ship.
 
 ---
 
 ## 1. What v1 is
 
-A web application where an institution's counsellor uploads a class roster, each student
-completes a ~25-minute three-module assessment on their phone, and two artifacts come out:
+A web application implementing **Phase 1 of Clarity Compass** ("Assess → Identify") for
+institutions: a counsellor uploads a class roster, each student completes a ~20-minute two- or
+three-module assessment on their phone, a psychologist (or trained counsellor acting in that role)
+reviews the machine output plus a short interview and confirms 2–3 career directions, and two
+artifacts come out:
 
-- **Student report** — branded PDF, ~12 pages, emailed to the student and stored for the counsellor.
+- **Student report** — branded PDF, ~13 pages, released only after psychologist confirmation, emailed
+  to the student and stored for the counsellor.
 - **Cohort report** — branded PDF for the institution: interest distributions, the intended-field
-  congruence rate, value conflicts, and named lists of students to follow up.
+  congruence rate, and named lists of students to follow up.
 
-The cohort report is the thing being sold. Build the student report first because it is the input,
-but never treat the cohort report as a stretch goal.
+Phase 2 of the deck — the AI-driven roadmap, milestone tracking, live rerouting and LMS connector —
+is **v2, not v1**. §21 specifies what it is and why it waits. Building it now, before Phase 1 has a
+single paying customer, is a six-month detour with no revenue at the end of it.
+
+### Why the psychologist step, and what it costs you
+
+Two wellbeing counsellors told you plainly: an automated report with nobody checking it is a
+liability, and clients want a human in the loop. That is also, not coincidentally, the thing that
+makes this defensible against a free internet quiz. The cost is real and you should go in with eyes
+open: **one psychologist can review perhaps 15–25 students inside a single pilot week**, not the
+400-student cohort the original plan assumed. §9 and §17 (M11) are sized to that reality.
 
 ### In scope
 
 | | |
 |---|---|
-| Counsellor accounts, scoped to an organisation | Email + password auth |
+| Counsellor and psychologist accounts, scoped to an organisation | Email + password auth, two roles |
 | Roster upload, bulk invite, progress tracking | CSV |
-| Three-module assessment, resumable, mobile-first | 130 items + a 20-card sort |
+| Two-to-three module assessment, resumable, mobile-first, unhurried but not tedious | Interests + personality, GET2 if §20 item 1 clears in time |
 | Scoring engine with flags and provisional bands | §7 |
 | Occupation matching with a Pakistan mapping layer | §8 |
-| Student PDF, institution-branded | §13 |
-| Cohort PDF and dashboard | §9, §13 |
+| **Psychologist review queue: scores, flags, interview notes, destination confirmation** | §9 |
+| Student PDF, released only post-confirmation, institution-branded | §14 |
+| Cohort PDF and dashboard | §10, §14 |
 | Rescore-everything command | R1 |
 
 ### Explicitly out of scope for v1
 
-Student accounts · self-serve signup · card checkout · Urdu · the 120-item deep profile ·
-aptitude/ability testing · a mobile app · custom domains per tenant · any AI-generated report content.
+Student accounts · self-serve signup · card checkout · Urdu · the 120-item deep personality profile ·
+aptitude/ability testing · a mobile app · custom domains per tenant · any AI-generated report or
+interview content · Phase 2 in full (§21): the O*NET roadmap engine, milestone tracker, adaptive
+rerouting, LMS connector, and push notifications.
 
 ---
 
@@ -120,7 +169,8 @@ aptitude/ability testing · a mobile app · custom domains per tenant · any AI-
 ```
                     ┌──────────────────────────┐
   Counsellor  ───►  │  Next.js (Vercel)        │
-  Student     ───►  │  taker UI, dashboard,    │
+  Psychologist───►  │  taker UI, dashboards,   │
+  Student     ───►  │  review queue,           │
                     │  server actions          │
                     └───────┬──────────┬───────┘
                             │          │
@@ -129,6 +179,7 @@ aptitude/ability testing · a mobile app · custom domains per tenant · any AI-
                     ┌──────────────────────────┐
                     │  Supabase (Postgres)     │
                     │  auth · data · storage   │
+                    │  DB trigger enforces R9  │
                     └───────▲──────────┬───────┘
                             │          │
                      reads/ │          │ reads
@@ -140,23 +191,16 @@ aptitude/ability testing · a mobile app · custom domains per tenant · any AI-
                     └──────────────────────────┘
 ```
 
-### The one design decision that makes the free tier work
+Unchanged from v1: the engine is never called synchronously from a user request; a job queue plus
+a five-minute GitHub Actions cron does the work, which keeps a sleeping free-tier host harmless and
+the Supabase free project from pausing on inactivity. See v1 rationale, preserved below in §12.
 
-The engine is **never called synchronously from a user request.** When a student submits, the web
-app writes a row to `jobs` and immediately shows "your report is being prepared". A GitHub Actions
-cron hits `POST /tick` on the engine every five minutes; the engine wakes, claims pending jobs,
-scores them, renders PDFs, sends email, and goes back to sleep.
+**What's new structurally:** a session's life cycle now has a human checkpoint between scoring and
+reporting. `scores` land automatically; `reports` (student kind) require a `reviews` row confirmed
+by a psychologist. The web app gains a psychologist-facing queue (§9, §13) alongside the
+counsellor's roster dashboard.
 
-This single mechanism solves three problems at once:
-
-1. A sleeping free-tier worker with a 60-second cold start is harmless — nobody is waiting.
-2. The tick touches Postgres, which keeps the Supabase free project from pausing after 7 days idle.
-3. Failed jobs retry naturally on the next tick instead of losing a student's submission.
-
-Do not "optimise" this later by calling the engine directly from a request handler. Report
-generation taking a minute is a feature of the architecture, not a defect.
-
-### Stack
+### Stack — unchanged
 
 | Layer | Choice | Why |
 |---|---|---|
@@ -164,82 +208,57 @@ generation taking a minute is a feature of the architecture, not a defect.
 | Data/auth/storage | Supabase | Postgres + auth + object storage in one free tier |
 | Engine | Python 3.12, FastAPI, numpy, pandas, Jinja2, WeasyPrint | Scoring and PDF are Python's home ground |
 | Scheduler | GitHub Actions cron | Free, outside the sleeping host |
-| Email | Resend (swap-able behind an interface) | Free tier covers a cohort many times over |
+| Email | Resend (swap-able behind an interface) | Free tier covers a pilot cohort many times over |
 | Engine host | Any free container host; Railway Hobby ($5/mo) when it matters | Treat as disposable compute |
-
-**Rule:** all persistent state lives in Supabase. The engine host holds nothing. Moving the engine
-to a different provider must be an afternoon's work, never a migration.
 
 ---
 
 ## 3. Repository layout
 
+Unchanged from v1 except two additions, marked `NEW`:
+
 ```
 percentile/
-├── plan.md                       # this file
+├── plan.md
 ├── README.md
-├── .github/workflows/tick.yml    # cron → POST /tick
+├── .github/workflows/tick.yml
 ├── db/
 │   ├── migrations/
 │   │   ├── 0001_init.sql
 │   │   ├── 0002_rls.sql
+│   │   ├── 0003_reviews.sql        # NEW — §9 tables and the R9 trigger
 │   │   └── ...
-│   └── seed/
-│       └── demo_org.sql
+│   └── seed/demo_org.sql
 ├── data/
 │   ├── instruments/
-│   │   ├── interests_items.csv       # O*NET IP-SF, 60 rows — YOU download
-│   │   ├── personality_items.csv     # IPIP Big Five markers, 50 rows — YOU download
-│   │   ├── values_statements.csv     # WIL, 20 rows — YOU download
-│   │   └── values_scoring.json       # WIL worksheet encoding — YOU transcribe
-│   ├── onet/
-│   │   ├── occupation_data.csv       # O*NET db export
-│   │   ├── interests.csv
-│   │   ├── work_values.csv
-│   │   └── job_zones.csv
-│   └── local/
-│       └── pk_occupation_map.csv     # your curated Pakistan layer
+│   │   ├── interests_items.csv        # O*NET IP-SF, 60 rows
+│   │   ├── personality_items.csv      # IPIP Big Five markers, 50 rows
+│   │   ├── get2_items.csv             # NEW — GET2, ~54 rows, verify count in M1
+│   │   └── get2_scoring.json          # NEW — subscale → item map, response weights
+│   ├── onet/  (unchanged: occupation_data.csv, interests.csv, work_values.csv, job_zones.csv)
+│   └── local/pk_occupation_map.csv
 ├── engine/
-│   ├── pyproject.toml
 │   ├── app/
-│   │   ├── main.py               # FastAPI app, routes
-│   │   ├── config.py             # env, settings
-│   │   ├── db.py                 # supabase client
-│   │   ├── jobs.py               # claim / run / retry
 │   │   ├── scoring/
 │   │   │   ├── interests.py
 │   │   │   ├── personality.py
-│   │   │   ├── values.py
+│   │   │   ├── get2.py             # NEW, replaces values.py
 │   │   │   ├── flags.py
-│   │   │   └── engine.py         # orchestrates, stamps version
-│   │   ├── matching/
-│   │   │   ├── occupations.py
-│   │   │   └── cohort.py
-│   │   ├── report/
-│   │   │   ├── student.py
-│   │   │   ├── cohort.py
-│   │   │   ├── charts.py         # hand-built SVG, no plotting lib
-│   │   │   └── templates/
-│   │   │       ├── student.html.j2
-│   │   │       ├── cohort.html.j2
-│   │   │       └── report.css
-│   │   ├── content/
-│   │   │   ├── interpretations.yaml   # HUMAN-WRITTEN (R3)
-│   │   │   └── occupations_pk.yaml
+│   │   │   └── engine.py
+│   │   ├── matching/{occupations.py, cohort.py}
+│   │   ├── review/                 # NEW
+│   │   │   └── workflow.py         # state transitions, §9
+│   │   ├── report/{student.py, cohort.py, charts.py, templates/}
+│   │   ├── content/{interpretations.yaml, occupations_pk.yaml}
 │   │   └── email.py
-│   ├── scripts/
-│   │   ├── load_instruments.py
-│   │   ├── load_onet.py
-│   │   └── rescore_all.py        # R1
+│   ├── scripts/{load_instruments.py, load_onet.py, rescore_all.py}
 │   └── tests/
-│       ├── fixtures/
-│       └── test_*.py
 └── web/
-    ├── package.json
     ├── app/
     │   ├── (marketing)/
-    │   ├── (dash)/
-    │   └── a/[token]/            # the student taker flow
+    │   ├── (dash)/                 # counsellor: roster, cohort report, org settings
+    │   ├── (review)/               # NEW — psychologist queue and interview form
+    │   └── a/[token]/              # student taker
     ├── components/
     ├── lib/
     └── tests/
@@ -249,338 +268,182 @@ percentile/
 
 ## 4. Accounts, secrets, environment
 
-Create, in this order: GitHub repo · Supabase project · Vercel project (link repo) · Resend account
-and verified sending domain · engine host account.
-
-### `web/.env.local`
-
-```
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=        # server-side only, never in a client component
-ENGINE_BASE_URL=
-ENGINE_SHARED_SECRET=
-NEXT_PUBLIC_APP_URL=
-```
-
-### `engine/.env`
-
-```
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-ENGINE_SHARED_SECRET=
-RESEND_API_KEY=
-REPORT_STORAGE_BUCKET=reports
-SCORING_ENGINE_VERSION=1.0.0
-APP_BASE_URL=
-LOG_LEVEL=INFO
-```
-
-`SUPABASE_SERVICE_ROLE_KEY` bypasses row-level security. It appears only in server-side Next.js
-code and in the engine. If it ever reaches a `NEXT_PUBLIC_` variable or a client component, every
-student record in the database is public. Add a CI grep that fails the build on
-`SERVICE_ROLE` appearing in `web/app/**` client components.
+Unchanged from v1. See Appendix A for the full `.env` templates (`web/.env.local`, `engine/.env`).
+One addition: if GET2 permission (R10, §20 item 1) requires crediting a specific licence text on
+the report, add it to `engine/app/content/occupations_pk.yaml`'s sibling `attributions.yaml` once
+the wording is confirmed — do not hard-code attribution strings inside templates.
 
 ---
 
 ## 5. Database schema
 
-`db/migrations/0001_init.sql`. Postgres via Supabase. `gen_random_uuid()` requires `pgcrypto`.
+Everything from v1 §5 stands. This section gives the v2 additions as a new migration,
+`0003_reviews.sql`, plus the one changed table (`participants.status` gains new values) and the
+GET2-shaped `scores.get2` column.
+
+### Changed: `participants.status`
+
+```
+invited → started → submitted → scored → pending_review → reviewed → confirmed
+                                                    ╲
+                                                     → needs_more_info → pending_review (loop)
+```
+
+`failed` remains a terminal error state reachable from any point. `reviewed` means the
+psychologist has entered notes but not yet locked in a destination; `confirmed` means the
+student report can render (R9).
+
+### `db/migrations/0003_reviews.sql`
 
 ```sql
-create extension if not exists pgcrypto;
+-- ── psychologist role ────────────────────────────────────────────────────
+alter table profiles
+  drop constraint if exists profiles_role_check;
+alter table profiles
+  add constraint profiles_role_check
+  check (role in ('counsellor', 'psychologist', 'org_admin', 'superadmin'));
 
--- ── tenancy ──────────────────────────────────────────────────────────────
-create table organisations (
-  id              uuid primary key default gen_random_uuid(),
-  name            text not null,
-  slug            text unique not null,
-  logo_path       text,                       -- supabase storage path
-  brand_hex       text default '#1C6A61',
-  plan            text not null default 'pilot',   -- pilot | institution
-  seats_purchased int  not null default 0,
-  created_at      timestamptz not null default now()
+-- ── occupation catalogue: mark entrepreneurship-track roles ─────────────
+alter table occupations add column if not exists entrepreneurial_track boolean not null default false;
+
+-- ── reviews: the human checkpoint required by R9 ─────────────────────────
+create table reviews (
+  id                uuid primary key default gen_random_uuid(),
+  session_id        uuid not null references sessions(id) on delete cascade,
+  reviewer_id       uuid not null references profiles(id),
+  status            text not null default 'in_progress',  -- in_progress|confirmed|needs_more_info
+  interview_mode    text,                 -- 'in_person' | 'video' | 'async_notes'
+  interview_at      timestamptz,
+  interview_notes   text,                 -- free text, the psychologist's own words (R3)
+  flags_reviewed    jsonb not null default '[]'::jsonb,  -- which engine flags they looked at
+  confirmed_at      timestamptz,
+  created_at        timestamptz not null default now(),
+  unique (session_id)
 );
+create index on reviews(reviewer_id);
+create index on reviews(status);
 
-create table profiles (                        -- counsellors & admins
-  id              uuid primary key references auth.users(id) on delete cascade,
-  organisation_id uuid not null references organisations(id) on delete cascade,
-  full_name       text not null,
-  role            text not null default 'counsellor',  -- counsellor | org_admin | superadmin
-  created_at      timestamptz not null default now()
-);
-create index on profiles(organisation_id);
-
-create table cohorts (
-  id              uuid primary key default gen_random_uuid(),
-  organisation_id uuid not null references organisations(id) on delete cascade,
-  name            text not null,              -- "Class of 2027 — Pre-Medical A"
-  intake_year     int,
-  education_level text,                       -- matric | intermediate | undergraduate
-  created_by      uuid references profiles(id),
-  created_at      timestamptz not null default now()
-);
-create index on cohorts(organisation_id);
-
--- ── participants ─────────────────────────────────────────────────────────
-create table participants (
-  id                 uuid primary key default gen_random_uuid(),
-  cohort_id          uuid not null references cohorts(id) on delete cascade,
-  full_name          text not null,
-  email              text,
-  external_ref       text,                    -- roll number
-  intended_field     text,                    -- see §19 item 2
-  education_level    text,
-  invite_token_hash  text unique not null,    -- sha256 of the token; never store the token
-  consent_at         timestamptz,
-  status             text not null default 'invited',  -- invited|started|submitted|scored|failed
-  created_at         timestamptz not null default now()
-);
-create index on participants(cohort_id);
-create index on participants(status);
-
--- ── instrument definition (data, not code) ───────────────────────────────
-create table instruments (
-  code        text primary key,               -- 'interests' | 'personality' | 'values'
-  title       text not null,
-  version     text not null,
-  source      text not null,
-  licence     text not null,
-  item_count  int  not null
-);
-
-create table items (
-  id              uuid primary key default gen_random_uuid(),
-  instrument_code text not null references instruments(code),
-  ordinal         int  not null,
-  code            text not null,              -- stable id, e.g. 'IP_R_03'
-  text            text not null,
-  scale           text not null,              -- R I A S E C | O C E A N | ACH IND REC REL SUP WCN
-  reverse_keyed   boolean not null default false,
-  response_min    int not null,
-  response_max    int not null,
-  unique (instrument_code, code)
-);
-create index on items(instrument_code, ordinal);
-
--- ── sessions & responses ─────────────────────────────────────────────────
-create table sessions (
-  id             uuid primary key default gen_random_uuid(),
-  participant_id uuid not null references participants(id) on delete cascade,
-  started_at     timestamptz,
-  submitted_at   timestamptz,
-  last_seen_at   timestamptz,
-  user_agent     text,
-  progress       jsonb not null default '{}'::jsonb,  -- {module: last_ordinal}
-  unique (participant_id)
-);
-
-create table responses (
-  id           uuid primary key default gen_random_uuid(),
-  session_id   uuid not null references sessions(id) on delete cascade,
-  item_id      uuid not null references items(id),
-  value        int  not null,
-  ms_elapsed   int,                            -- time on this item; feeds flags
-  answered_at  timestamptz not null default now(),
-  unique (session_id, item_id)
-);
-create index on responses(session_id);
-
--- values card sort: 20 statements → 5 columns × 4 cards
-create table value_sorts (
+-- a session can have exactly one *current* review; re-opening for "needs_more_info"
+-- updates this row rather than creating a new one, so history stays on one thread
+create table review_events (
   id          uuid primary key default gen_random_uuid(),
-  session_id  uuid not null references sessions(id) on delete cascade,
-  item_id     uuid not null references items(id),
-  column_no   int  not null check (column_no between 1 and 5),
-  unique (session_id, item_id)
-);
-
--- ── derived ──────────────────────────────────────────────────────────────
-create table scores (
-  id              uuid primary key default gen_random_uuid(),
-  session_id      uuid not null references sessions(id) on delete cascade,
-  engine_version  text not null,
-  scored_at       timestamptz not null default now(),
-  interests       jsonb not null,   -- {R:31,I:38,...,code:"ISA",differentiation:14,band:"moderate"}
-  personality     jsonb not null,   -- {O:41,C:33,E:22,A:38,S:27, bands:{...}}
-  values_scores   jsonb not null,   -- {ACH:24,IND:18,...,top2:["ACH","REL"]}
-  flags           jsonb not null default '[]'::jsonb,
-  unique (session_id, engine_version)
-);
-create index on scores(session_id);
-
-create table occupation_matches (
-  id             uuid primary key default gen_random_uuid(),
-  session_id     uuid not null references sessions(id) on delete cascade,
-  engine_version text not null,
-  rank           int  not null,
-  onet_soc_code  text not null,
-  score          numeric(5,4) not null,
-  local_title    text,
-  local_pathway  text,
-  unique (session_id, engine_version, rank)
-);
-
--- ── reference data ───────────────────────────────────────────────────────
-create table occupations (
-  onet_soc_code   text primary key,
-  title           text not null,
-  job_zone        int,
-  interest_r numeric, interest_i numeric, interest_a numeric,
-  interest_s numeric, interest_e numeric, interest_c numeric,
-  value_ach numeric, value_ind numeric, value_rec numeric,
-  value_rel numeric, value_sup numeric, value_wcn numeric,
-  pk_title        text,     -- your localisation layer
-  pk_pathway      text,     -- "FSc Pre-Engineering → BS Mechanical Engineering"
-  pk_relevant     boolean not null default false
-);
-create index on occupations(pk_relevant);
-
-create table norms (
-  id           uuid primary key default gen_random_uuid(),
-  population   text not null,    -- 'pk_intermediate_2026'
-  instrument   text not null,
-  scale        text not null,
-  n            int  not null,
-  mean         numeric not null,
-  sd           numeric not null,
-  percentiles  jsonb not null,   -- {"5":12,"10":15,...,"95":36}
-  computed_at  timestamptz not null default now(),
-  unique (population, instrument, scale)
-);
-
--- ── reports & jobs ───────────────────────────────────────────────────────
-create table reports (
-  id               uuid primary key default gen_random_uuid(),
-  kind             text not null,       -- 'student' | 'cohort'
-  session_id       uuid references sessions(id) on delete cascade,
-  cohort_id        uuid references cohorts(id) on delete cascade,
-  storage_path     text not null,
-  template_version text not null,
-  engine_version   text not null,
-  created_at       timestamptz not null default now(),
-  check ((kind = 'student' and session_id is not null)
-      or (kind = 'cohort'  and cohort_id  is not null))
-);
-
-create table jobs (
-  id            uuid primary key default gen_random_uuid(),
-  kind          text not null,        -- score_session | render_student | render_cohort | send_email | recompute_norms
-  payload       jsonb not null,
-  status        text not null default 'pending',  -- pending|running|done|failed
-  attempts      int  not null default 0,
-  last_error    text,
-  run_after     timestamptz not null default now(),
-  claimed_at    timestamptz,
-  created_at    timestamptz not null default now()
-);
-create index on jobs(status, run_after);
-
-create table audit_log (
-  id          uuid primary key default gen_random_uuid(),
-  actor       uuid,
-  action      text not null,
-  subject     text,
+  review_id   uuid not null references reviews(id) on delete cascade,
+  actor       uuid references profiles(id),
+  event       text not null,   -- opened | note_added | direction_proposed | confirmed | reopened
   meta        jsonb,
   created_at  timestamptz not null default now()
 );
+
+-- ── confirmed career directions: the joint decision the deck describes ──
+create table career_directions (
+  id              uuid primary key default gen_random_uuid(),
+  review_id       uuid not null references reviews(id) on delete cascade,
+  rank            int  not null check (rank between 1 and 3),
+  onet_soc_code   text references occupations(onet_soc_code),
+  local_title     text not null,          -- shown to the student even if onet_soc_code is null
+  rationale       text,                    -- psychologist's own words, short
+  student_selected boolean not null default false,  -- did the student pick this as "the" one
+  unique (review_id, rank)
+);
+
+-- ── enforce R9 at the database level, not just in application code ──────
+create or replace function enforce_review_before_student_report()
+returns trigger as $$
+begin
+  if NEW.kind = 'student' then
+    if not exists (
+      select 1 from reviews r
+      where r.session_id = NEW.session_id and r.status = 'confirmed'
+    ) then
+      raise exception 'R9 violation: no confirmed review for session %', NEW.session_id;
+    end if;
+  end if;
+  return NEW;
+end;
+$$ language plpgsql;
+
+create trigger trg_enforce_review_before_student_report
+  before insert on reports
+  for each row execute function enforce_review_before_student_report();
 ```
 
-### Row-level security — `0002_rls.sql`
+### GET2 in `scores`
 
-Enable RLS on every table above. Policy shape:
+No migration needed — `scores.values_scores` (v1's name for the third module) simply now holds the
+GET2 shape instead of the WIL shape:
 
-- `profiles`: a user reads only their own row.
-- `organisations`, `cohorts`, `participants`, `sessions`, `responses`, `value_sorts`, `scores`,
-  `occupation_matches`, `reports`: readable only where the row's organisation matches the caller's
-  `profiles.organisation_id`. Write via server-side code only.
-- `items`, `instruments`, `occupations`, `norms`: readable by any authenticated user; written only
-  by the service role.
-- `jobs`, `audit_log`: service role only, no anon or authenticated access.
+```json
+{"instrument": "GET2",
+ "subscales": {"achievement": 67, "autonomy": 17, "creativity": 42, "risk_taking": 33, "control": 50},
+ "get2_total": 44,
+ "entrepreneurial_band": "moderate"}
+```
 
-Students are not authenticated. The taker flow reaches the database only through Next.js server
-actions that resolve `sha256(token) → participants.invite_token_hash` using the service role, and
-those actions must never accept a `participant_id` from the client — only a token.
+If R10 permission does not clear in time, `scores.values_scores` is written as
+`{"instrument": null, "status": "module_not_administered"}` and every downstream template branches
+on `instrument` rather than assuming the key exists. Write that branch into `engine.py` from day
+one (M2) so dropping the module later is a config flag, not a rewrite.
 
-**Write a test that logs in as counsellor A and asserts a 0-row result for cohort B's participants.**
-Getting this wrong leaks minors' data across institutions.
+### RLS additions
+
+`reviews`, `review_events`, `career_directions`: readable/writable only by profiles with
+`role in ('psychologist', 'org_admin', 'superadmin')` scoped to the session's organisation, plus a
+narrow read-only policy so a `counsellor` can see `status` and `confirmed_at` (to track progress)
+but not `interview_notes` unless they also hold the psychologist role. Write a test for exactly
+that boundary — a counsellor reading interview notes is the kind of leak that ends a pilot.
 
 ---
 
 ## 6. Instrument data files
 
-**None of these files are generated. You download or transcribe them (R2).**
+Everything from v1 §6.1 (Interest Profiler) and §6.2 (IPIP-50) is unchanged. This replaces v1 §6.3
+(Work Importance Locator, now retired — see §19) with GET2, and keeps the O*NET occupation files
+(§6.4 below, was §6.4) as-is.
 
-### `data/instruments/interests_items.csv`
+### 6.3 `data/instruments/get2_items.csv` and `get2_scoring.json` — NEW
 
-Source: O*NET Resource Center → Interest Profiler Short Form. Choose the licence in §0/R6 and record
-it in the `instruments` row.
+Source: Caird, S., *General Measure of Enterprising Tendency v2 (GET2)*, published through The
+Open University (Open Research Online) and hosted at get2test.net. **R10 applies: confirm written
+permission before this module reaches a paying customer.**
+
+Five subscales, confirmed from the published test-results documentation:
+`achievement` (need for achievement), `autonomy` (need for autonomy), `creativity` (creative
+tendency), `risk_taking` (calculated risk-taking), `control` (internal locus of control).
+
+**Item count and exact response scale need to be pinned from the primary source during M1** — the
+figures circulating in secondary summaries (commonly cited as 54 items, a 3-point
+agree/uncertain/disagree scale) were not independently confirmed while scoping this plan. Download
+Caird's guide PDF directly from Open Research Online (`oro.open.ac.uk`, item id 5393) rather than
+trusting a course-notes reproduction, and transcribe from that.
 
 ```csv
 code,ordinal,text,scale,response_min,response_max,reverse_keyed
-IP_R_01,1,"<item text exactly as published>",R,0,4,false
-...60 rows: 10 each for R,I,A,S,E,C
+GET2_ACH_01,1,"<item text exactly as published>",achievement,0,2,false
+...
 ```
-
-Response scale: 0 = strongly dislike … 4 = strongly like. Scale score range 0–40.
-
-### `data/instruments/personality_items.csv`
-
-Source: ipip.ori.org, the 50-item Big-Five factor markers (10 per domain). Public domain.
-
-```csv
-code,ordinal,text,scale,response_min,response_max,reverse_keyed
-IPIP_E_01,1,"<item text exactly as published>",E,1,5,false
-IPIP_E_02,2,"<item text exactly as published>",E,1,5,true
-...50 rows
-```
-
-Scale letters: `O` Openness/Intellect, `C` Conscientiousness, `E` Extraversion, `A` Agreeableness,
-`S` Emotional Stability. **Use Stability, not Neuroticism, as the reported pole** — a report handed
-to a seventeen-year-old should not lead with a negatively framed trait name. Keep the item keying
-exactly as published and flip the direction once, in the scoring layer, with a documented constant.
-
-### `data/instruments/values_statements.csv` and `values_scoring.json`
-
-Source: O*NET Work Importance Locator user's guide and score report. 20 need statements, sorted into
-five columns of four (5 = most important … 1 = least). Transcribe the guide's scoring worksheet:
 
 ```json
 {
-  "values": {
-    "ACH": { "items": ["WIL_03","WIL_11","WIL_17"], "multiplier": 2, "min": 6, "max": 30 },
-    "IND": { "items": [...], "multiplier": 2, "min": 6, "max": 30 },
-    "REC": { ... }, "REL": { ... }, "SUP": { ... },
-    "WCN": { "items": [...], "multiplier": 1, "min": 6, "max": 30 }
+  "subscales": {
+    "achievement":  { "items": ["GET2_ACH_01", "..."], "max_raw": 24 },
+    "autonomy":     { "items": [...], "max_raw": 24 },
+    "creativity":   { "items": [...], "max_raw": 24 },
+    "risk_taking":  { "items": [...], "max_raw": 24 },
+    "control":      { "items": [...], "max_raw": 24 }
   },
-  "labels": {
-    "ACH": "Achievement", "IND": "Independence", "REC": "Recognition",
-    "REL": "Relationships", "SUP": "Support", "WCN": "Working Conditions"
-  }
+  "reporting": "percentage_of_max"
 }
 ```
 
-Transcribe the multipliers from the manual; they are not all the same, and Working Conditions is
-handled differently. **Verify your implementation against the worked example in the published score
-report before trusting a single result.**
+Report each subscale as a percentage of its own maximum (matching how GET2 results are
+conventionally presented) rather than inventing a new scale — a counsellor who has seen a GET2
+report before should recognise the shape.
 
-### `data/onet/*.csv`
+### 6.4 `data/onet/*.csv` and `data/local/pk_occupation_map.csv`
 
-Download the O*NET database text files: `Occupation Data`, `Interests`, `Work Values`, `Job Zones`.
-`scripts/load_onet.py` pivots the long-format Interests and Work Values files into the wide
-`occupations` columns.
-
-### `data/local/pk_occupation_map.csv`
-
-Yours. Hand-curated, target ~120 rows, grown over time.
-
-```csv
-onet_soc_code,pk_title,pk_pathway,pk_relevant
-29-1141.00,"Nurse (BSN)","FSc Pre-Medical → BS Nursing",true
-17-2141.00,"Mechanical Engineer","FSc Pre-Engineering → BE/BS Mechanical",true
-```
-
-This file is the moat. Budget two weeks of evenings for the first pass and revise after every pilot.
+Unchanged from v1. One addition: hand-flag `entrepreneurial_track = true` on a subset of your
+Pakistan-mapped occupations (small business owner / trader, franchise operator, tech founder track,
+agri-business) for the report section described in §7.3 and §14.
 
 ---
 
@@ -589,564 +452,450 @@ This file is the moat. Budget two weeks of evenings for the first pass and revis
 `engine/app/scoring/`. Pure functions: raw responses in, score dict out. No database access inside
 the scoring modules — that makes them trivially testable and rescoreable.
 
-### 7.1 Interests — `interests.py`
+### 7.1 Interests, 7.2 Personality
+
+Unchanged from v1 — see the full spec preserved below. Interests: O*NET Interest Profiler Short
+Form, 60 items, six 0–40 scales, differentiation and Holland-code logic exactly as before.
+Personality: IPIP-50, reverse-keying via `response_max + response_min - raw`, five domain sums
+10–50 with provisional bands, switching to normative bands once `norms` has `n ≥ 300`.
+
+### 7.3 Entrepreneurial tendency — `get2.py` (replaces v1's `values.py`)
 
 ```python
-def score_interests(responses: dict[str, int], items: list[Item]) -> dict:
-    """responses: {item_code: 0..4}"""
+def score_get2(responses: dict[str, int], scoring: Get2Scoring) -> dict:
+    """Returns None-shaped output if the module wasn't administered (R10 fallback)."""
 ```
 
-1. `raw[scale] = sum(responses[i.code] for i in items if i.scale == scale)` → 0..40 each.
-2. `differentiation = max(raw.values()) - min(raw.values())`
-3. Differentiation band — **report copy changes on this, it is not decoration**:
-   - `>= 20` → `"well_differentiated"`
-   - `10..19` → `"moderate"`
-   - `< 10` → `"undifferentiated"` — the report must say in words that no clear code emerged and
-     that the counsellor should explore rather than recommend.
-4. Holland code = top three scales by raw score, descending. Tie-break in fixed order
-   `R,I,A,S,E,C` and record `tie_broken: true`.
-5. If `raw[3rd] - raw[4th] < 2`, set `code_provisional: true` and the report says the third letter
-   is unstable.
-6. Percentiles only if a matching `norms` row exists with `n >= 300` (R4). Otherwise
-   `percentiles: null, norms_status: "pending_local_norms"`.
+1. If GET2 was not administered for this session (org config, or R10 permission not yet cleared):
+   return `{"instrument": None, "status": "module_not_administered"}` and stop.
+2. Per subscale: `raw = sum(responses[i.code] for i in scoring.subscales[name].items)`.
+3. `pct = round(100 * raw / scoring.subscales[name].max_raw)`.
+4. `get2_total = mean of the five subscale percentages`, rounded.
+5. Band, provisional until norms exist:
 
-Output:
-```json
-{"raw":{"R":18,"I":34,"A":29,"S":31,"E":20,"C":12},
- "code":"ISA","differentiation":22,"band":"well_differentiated",
- "code_provisional":false,"percentiles":null,
- "norms_status":"pending_local_norms"}
-```
-
-### 7.2 Personality — `personality.py`
-
-1. For each item: `v = raw if not item.reverse_keyed else (item.response_max + item.response_min - raw)`
-   → for a 1..5 scale that is `6 - raw`. Never hard-code the 6.
-2. `domain[scale] = sum(v)` over its 10 items → 10..50.
-3. Bands, **provisional until norms exist**, and labelled as such in the report:
-
-   | Sum | Band |
+   | `get2_total` | Band |
    |---|---|
-   | ≤ 19 | very low |
-   | 20–27 | low |
-   | 28–34 | average |
-   | 35–42 | high |
-   | ≥ 43 | very high |
+   | < 35 | emerging |
+   | 35–64 | moderate |
+   | ≥ 65 | strong |
 
-4. When `norms` has a row for this population with `n >= 300`, bands switch to normative
-   (`< -1.5 SD`, `-1.5..-0.5`, `-0.5..0.5`, `0.5..1.5`, `> 1.5 SD`) and `norms_status` becomes
-   `"local"`. Both paths return the same shape so the template does not branch.
+6. `entrepreneurial_flag = true` if `get2_total ≥ 65` **or** `risk_taking ≥ 70 and autonomy ≥ 70` —
+   this drives whether the report surfaces the entrepreneurship-track occupations from
+   `pk_occupation_map.csv` (§6.4) and whether the psychologist's review screen highlights it.
 
-### 7.3 Work values — `values.py`
-
-1. Validate the sort: exactly 20 placements, exactly 4 cards in each of 5 columns. Reject otherwise —
-   a partial sort is not scoreable and must not be silently zero-filled.
-2. For each value: `score = multiplier * sum(column_no for its items)`, per `values_scoring.json`.
-3. Range-check against the published `min`/`max`; raise on violation rather than clamping. A score
-   outside range means the transcription is wrong and you want to know immediately.
-4. `top2` = two highest, ties broken alphabetically, `tie_broken` recorded.
+GET2 is deliberately **not** folded into the cosine-similarity occupation match in §8 — it measures
+a different thing (tendency to act, not interest content) and O*NET occupation profiles have no
+equivalent axis to compare it against. It surfaces as its own report section and as a boolean flag
+that biases which occupations get shown, not as a fourth dimension bolted onto the interest vector.
 
 ### 7.4 Response-quality flags — `flags.py`
 
-Flags appear **only on the counsellor's copy**, never on the student's (R8, and it is simply unkind).
-
-| Flag | Rule |
-|---|---|
-| `straightlining` | longest run of identical values across modules A+B ≥ 12 |
-| `too_fast` | total active time < 6 min, or median item time < 800 ms |
-| `inconsistent_pairs` | for any Big Five domain, \|mean(forward) − reverse-adjusted mean(reverse)\| > 1.5 |
-| `long_gap` | > 48 h between start and submit — context changed mid-assessment |
-| `incomplete_sort` | card sort completed by fallback rather than drag |
-
-Each flag: `{code, severity: "info"|"warn", detail}`. Two or more `warn` flags → the cohort report
-excludes that participant from aggregate statistics **and says how many were excluded and why**.
+Unchanged from v1 (straightlining, too-fast, inconsistent reverse-keyed pairs, long gaps,
+incomplete card sort — the last one drops out if the values/card-sort module is gone; add
+`get2_uniform_response` — every subscale within 5 points of each other, which usually means the
+respondent didn't engage). Flags appear only on the psychologist's review screen (§9), never on the
+student's copy.
 
 ### 7.5 Orchestration — `engine.py`
 
 ```python
 def score_session(session_id) -> ScoreRecord:
-    # 1. load items + responses + value_sorts
-    # 2. run the three scorers + flags
+    # 1. load items + responses
+    # 2. run interests, personality, get2 (or its null shape) + flags
     # 3. write scores row stamped with SCORING_ENGINE_VERSION
-    # 4. enqueue: match_occupations, then render_student, then send_email
+    # 4. enqueue: match_occupations
+    # 5. set participants.status = 'pending_review'
+    # 6. enqueue: notify_psychologist  (NOT render_student — R9)
 ```
 
-Bump `SCORING_ENGINE_VERSION` (semver) whenever any rule changes. `scripts/rescore_all.py` reruns
-every session under the current version, writing new `scores` rows and leaving old ones intact —
-that history is how you show a school that a rule change did or did not move their numbers.
+The one change from v1: scoring no longer chains straight to rendering. It hands off to the review
+queue (§9). `rescore_all.py` still works exactly as in v1 — it writes new `scores` rows under the
+current engine version without touching `reviews`, so a rescore never silently re-releases a report
+that hasn't been re-confirmed.
 
 ---
 
 ## 8. Occupation matching specification
 
-`engine/app/matching/occupations.py`.
-
-**Ipsatize before comparing.** Interest profiles differ in elevation (some people like everything);
-what matters is shape. Subtract each profile's own mean across its six scales, on both sides.
-
-```python
-def match(student_interests, student_values, education_level, k=15):
-    s = ipsatize(student_interests)                     # 6-vector, mean 0
-    pool = occupations_in_job_zones(job_zones_for(education_level))
-    rows = []
-    for occ in pool:
-        o = ipsatize(occ.interests)
-        interest_sim = cosine(s, o)                     # -1..1
-        values_sim   = pearson(student_values, occ.values)  # -1..1, 0 if occ values missing
-        score = 0.70 * norm01(interest_sim) + 0.30 * norm01(values_sim)
-        rows.append((occ, score))
-    rows.sort(key=lambda r: -r[1])
-    return diversify(rows, k=k, max_per_group=2)
-```
-
-Details that matter:
-
-- `norm01(x) = (x + 1) / 2`.
-- **Job Zone mapping** — `matric → [1,2,3]`, `intermediate → [2,3,4]`, `undergraduate → [3,4,5]`.
-  Job Zone is an education/experience band, so a matric student should not be matched to
-  occupations requiring a doctorate.
-- **`diversify`** caps results at 2 per 2-digit SOC major group. Without it the top 15 is fifteen
-  varieties of the same job and the report looks unintelligent.
-- **Localisation pass:** partition results into `pk_relevant = true` and the rest. The report shows
-  up to 10 local matches first, then up to 5 international ones under a separate heading. If fewer
-  than 5 local matches exist for a profile, that is a gap in `pk_occupation_map.csv` — log it, and
-  review the log monthly. Those logs tell you exactly which occupations to map next.
-- Write `occupation_matches` rows stamped with the engine version.
+Unchanged from v1: ipsatize, cosine similarity against the interest vector, Job Zone filter by
+education level, `diversify` capped at 2 per SOC major group, Pakistan-relevant results shown
+first. One addition: when `entrepreneurial_flag` is true (§7.3), include up to 3 results from
+`entrepreneurial_track = true` occupations even if their raw cosine score would have placed them
+outside the top 15, clearly labelled in the report as "worth exploring given your GET2 profile"
+rather than blended anonymously into the ranked list.
 
 ---
 
-## 9. Cohort analytics specification
+## 9. Psychologist review workflow
 
-`engine/app/matching/cohort.py`. This produces the numbers that sell the product, so specify them
-tightly enough that you can defend each one out loud.
+This section is new in v2 and is the mechanical heart of R9. It exists because the counsellors you
+spoke to were specific: they don't want an assessment that hands a seventeen-year-old a PDF with no
+human between the algorithm and the kid.
 
-### Field centroids
+### 9.1 What a psychologist sees
 
-For each `intended_field` in your dropdown, define the set of O*NET occupations it leads to (from
-`pk_occupation_map.csv`). The **field centroid** is the mean ipsatized interest vector of that set.
-Store it; recompute when the map changes.
+A queue at `/review` (organisation-scoped, `role = 'psychologist'` only), sorted oldest-first:
 
-### Congruence
+- Student name, cohort, intended field, time since submission.
+- All engine output: interest hexagon, personality bars, GET2 subscales (or "not administered"),
+  the top-15 occupation matches, and — prominently, not buried — every quality flag from §7.4 with
+  its plain-language meaning. `undifferentiated` and `straightlining` should be visually distinct
+  from `info`-level flags; they change what the review conversation needs to cover.
+- A free-text interview notes field (R3 — this is the psychologist's clinical voice, never
+  model-generated, never auto-filled from the scores).
+- A destination picker: search/select up to 3 `career_directions`, each with a short rationale
+  field. At least 1, at most 3 (matching "2–3 suitable career paths" from the deck).
+- Two actions: **Save draft** (`reviews.status = 'in_progress'`, can return later) and **Confirm**
+  (`status = 'confirmed'`, `confirmed_at = now()`, enqueues `render_student`).
+- A **Send back** action available even after a first pass: sets `participants.status =
+  'needs_more_info'` — used when the psychologist wants a second conversation before confirming.
 
-For each participant: `congruence = cosine(ipsatize(student_interests), centroid(intended_field))`.
+### 9.2 Interview modes
 
-| Congruence | Class |
-|---|---|
-| ≥ 0.60 | aligned |
-| 0.35 – 0.60 | partial |
-| < 0.35 | misaligned |
+`interview_mode` is recorded but the product does not schedule or host the interview in v1 — that
+is deliberately out of scope, matching the "polished but conventional" answer on gamification and
+the general instinct to not build tooling nobody asked for yet. In the pilot, interviews happen
+however the counsellor already runs them (in person, a call) and the notes get typed into the
+portal afterward. If a design partner specifically asks for scheduling, that is a v1.1 feature, not
+a v1 blocker.
 
-**These thresholds are provisional.** Print them on the cohort report's method page, and recalibrate
-against real data once you have 300+ students. Never present a threshold as though it were a law.
+### 9.3 Load and pacing
 
-### Cohort report contents
+One review — reading the profile, having or recalling the conversation, writing notes, picking
+directions — realistically takes 15–30 minutes once a psychologist is fluent with the screen. Size
+every pilot cohort against whoever is doing the reviewing: **15–25 students per reviewer per pilot
+week**, not the 40–60 the v1 plan assumed for a purely automated flow. §17 (M11) reflects this.
 
-1. `n` invited, `n` completed, completion rate, `n` excluded for quality flags with the reason.
-2. Holland code distribution — first-letter frequencies, and the top ten full three-letter codes.
-3. **The headline: congruence rate.** "31% of students in Pre-Medical are classed misaligned with
-   their stated field" plus the per-field breakdown.
-4. Named follow-up list — misaligned students, sorted by how misaligned, for the counsellor only.
-5. Value conflicts — students whose top work value is bottom-two in their field's centroid values.
-6. Mean interest profile of the cohort vs each field's centroid, as a hexagon overlay.
-7. Method page: instruments, versions, thresholds, exclusions, what the numbers do *not* mean (R7).
+### 9.4 What happens if nobody reviews it
 
-### Statistical honesty rules
-
-- Never report a percentage on a denominator below 10 without printing the denominator beside it.
-- Never compare two cohorts without stating both `n`s.
-- The report says "classed misaligned by this instrument", never "in the wrong field".
-
-That last distinction is the whole difference between a tool a counsellor trusts and a tool a
-counsellor is embarrassed to hand to a parent.
+`pending_review` sessions older than 5 days trigger a `job_failed_alert`-style email to you and the
+assigned org's `org_admin`, not to the student. A student never sees "your report is late" — they
+see a calm "your counsellor is preparing your results" state (§13). Silence on your end is an
+operational problem to fix, not something to expose to a sixteen-year-old.
 
 ---
 
-## 10. API contract
+## 10. Cohort analytics specification
 
-Engine base URL is private. Every route requires `X-Engine-Key: $ENGINE_SHARED_SECRET`; reject with
-401 otherwise. The engine is never called from a browser.
+Unchanged from v1: field centroids, congruence classes (aligned ≥0.60, partial 0.35–0.60,
+misaligned <0.35, provisional thresholds printed on the method page), the named follow-up list, and
+the statistical honesty rules (never a percentage on n<10 without the denominator shown). One
+addition: the cohort report's completion table now also shows `confirmed` vs `pending_review` counts
+— a school comparing this term to next needs to see review-queue backlog as its own number, not
+folded into "completion."
+
+---
+
+## 11. API contract
+
+Unchanged from v1 except one route:
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | liveness; also touches Postgres (keep-alive) |
-| `POST` | `/tick` | claim and run up to N pending jobs; returns a summary |
+| `POST` | `/tick` | claim and run up to N pending jobs |
 | `POST` | `/score/{session_id}` | force-score one session (admin/debug) |
-| `POST` | `/render/student/{session_id}` | force re-render |
+| `POST` | `/render/student/{session_id}` | **only succeeds if `reviews.status = 'confirmed'` (R9); returns 409 otherwise** |
 | `POST` | `/render/cohort/{cohort_id}` | build the cohort report |
 | `POST` | `/norms/recompute` | recompute norm tables for a population |
 | `GET` | `/version` | engine + template + instrument versions |
 
-`POST /tick` response:
-
-```json
-{"claimed": 4, "done": 3, "failed": 1,
- "by_kind": {"score_session": 2, "render_student": 2},
- "duration_ms": 8421}
-```
-
-### Web → engine
-
-Only two calls, both from server-side code:
-`POST /tick` is *not* one of them (that is the cron's job). The web app calls
-`POST /render/cohort/{id}` when a counsellor clicks "Generate cohort report", and `/version` on the
-admin page. Everything else flows through the `jobs` table.
+Every route still requires `X-Engine-Key`; the engine is never called from a browser.
 
 ---
 
-## 11. Job runner and keep-alive
+## 12. Job runner and keep-alive
 
-### Claiming (must be safe against overlapping ticks)
-
-```sql
-update jobs
-set status = 'running', claimed_at = now(), attempts = attempts + 1
-where id in (
-  select id from jobs
-  where status = 'pending' and run_after <= now()
-  order by created_at
-  limit 10
-  for update skip locked
-)
-returning *;
-```
-
-`for update skip locked` is what makes two overlapping ticks safe. Do not replace it with a
-select-then-update.
-
-### Retry
-
-On failure: `status = 'pending'`, `run_after = now() + interval '5 minutes' * attempts`,
-`last_error` set. At `attempts >= 5`: `status = 'failed'` and alert (an email to you is enough).
-A failed job means a student has no report — treat it as a real incident, not a log line.
-
-### `.github/workflows/tick.yml`
-
-```yaml
-name: tick
-on:
-  schedule: [{ cron: "*/5 * * * *" }]
-  workflow_dispatch:
-jobs:
-  tick:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wake engine and run jobs
-        run: |
-          curl -sS -m 120 -X POST "$ENGINE_BASE_URL/tick" \
-            -H "X-Engine-Key: $ENGINE_SHARED_SECRET" \
-            --retry 3 --retry-connrefused --fail-with-body
-        env:
-          ENGINE_BASE_URL: ${{ secrets.ENGINE_BASE_URL }}
-          ENGINE_SHARED_SECRET: ${{ secrets.ENGINE_SHARED_SECRET }}
-```
-
-`--retry-connrefused` matters: the first request wakes a sleeping host and may fail while it boots.
-
-Scheduled GitHub Actions on free plans can be delayed at peak times and are disabled after 60 days
-of repository inactivity. Both are fine for v1 — a five-minute job running eight minutes late is
-invisible — but on pilot day, run `workflow_dispatch` manually rather than waiting.
+Unchanged from v1: `for update skip locked` claiming, five-minute cron via GitHub Actions, retry
+with backoff up to 5 attempts then `failed` + alert. New job kinds: `notify_psychologist` (fires
+once when a session enters `pending_review`) and `review_reminder` (the 5-day nudge from §9.4).
 
 ---
 
-## 12. Web application
+## 13. Web application
 
-### Routes
+### Routes — one new route group
 
 ```
 /                              marketing
-/free-test                     public RIASEC-only taster → email capture   (M11)
+/free-test                     public RIASEC-only taster → email capture   (M13)
 /login  /logout
-/dash                          cohort list
-/dash/cohorts/new
-/dash/cohorts/[id]             roster, progress, per-student reports
+/dash                          counsellor: cohort list
+/dash/cohorts/[id]             roster, progress (invited/started/pending_review/confirmed), reports
 /dash/cohorts/[id]/upload      CSV
-/dash/cohorts/[id]/report      cohort report: generate, view, download
-/dash/settings                 org name, logo, brand colour
-/a/[token]                     student taker: consent → modules → done
+/dash/cohorts/[id]/report      cohort report
+/review                        NEW — psychologist queue (§9.1)
+/review/[session_id]           NEW — one student's full review screen
+/dash/settings                 org name, logo, brand colour, roles
+/a/[token]                     student taker: consent → modules → done → "your counsellor is preparing your results"
 ```
 
-### Taker flow — the part that decides whether students finish
+### Taker flow — mostly unchanged, with the gamification decision folded in
 
-- **One item per screen on mobile**, `n of 130` progress, module name visible.
-- Autosave every answer immediately (`POST` per response, optimistic UI). A student on a patchy
-  campus connection must never lose progress. Queue failed writes in `localStorage` and flush.
-- Resume from `sessions.progress` on reopen, with a "welcome back, continuing at item 47" screen.
-- **Card sort:** drag-and-drop into five columns of four, with a **tap-to-place fallback** (tap
-  card, tap column) that is always available, not only on touch failure. Drag-and-drop on a
-  mid-range Android browser is unreliable; the fallback is the real interface for many students.
-  Block submit until all five columns hold exactly four.
-- Consent screen first: what is measured, who sees it, that it is voluntary, how to withdraw. Record
-  `participants.consent_at`. No consent, no items.
-- No back-navigation past a submitted module; free movement within one.
-- Finish screen: "your report will reach you by email within a few minutes" — sets expectations that
-  match the tick cadence.
+You chose "polished but conventional" over full game mechanics — the right call for a 12-to-15-week
+solo build. Concretely, on top of v1's spec (one item per screen, autosave, resumable, tap-fallback
+for anything drag-based):
 
-### Roster CSV
+- Progress reads as a **path, not a bar** — a simple horizontal line of dots/segments per module
+  with the current position highlighted, rather than a raw "47/130" counter. Cheap to build
+  (a handful of styled divs), meaningfully less like a form.
+- A short, warm transition screen between modules ("Nice work — next up: how you tend to think
+  about things") rather than snapping straight into the next item. One screen, a few seconds,
+  costs almost nothing and directly answers the fatigue complaint.
+- No points, no badges, no unlockables in v1. If GET2's item count (§6.3) makes the total assessment
+  run past ~25 minutes once confirmed, cut there — session length matters more than polish.
+- End screen no longer promises a report "within a few minutes" (that was the v1, no-review-step
+  copy). It now says results are being reviewed by the student's counsellor and a report will follow
+  by email — set the expectation correctly given §9.
 
-```csv
-full_name,email,external_ref,intended_field,education_level
-Ayesha Khan,ayesha@example.edu.pk,2023-CS-014,Computer Science,undergraduate
-```
+### Roster CSV, consent screen
 
-Validate before insert: required columns present, emails well-formed, `intended_field` in the
-controlled vocabulary, no duplicate `external_ref` within the cohort. Show a preview table with
-per-row errors and import nothing until the file is clean. Generate a 32-byte urlsafe token per
-participant, store only `sha256(token)`, and surface the links once for distribution.
+Unchanged from v1 §12. The consent screen (§16) must now also disclose the review step in plain
+language: "a counsellor at [institution] will review your results and may follow up for a short
+conversation before your report is finalised."
 
 ---
 
-## 13. Report specification
+## 14. Report specification
 
-Jinja2 → HTML → WeasyPrint → PDF. A4, 18 mm margins. Charts are hand-written SVG in
-`report/charts.py` — a RIASEC hexagon and horizontal bars. No plotting library; the output is two
-shapes and WeasyPrint renders inline SVG well.
+Jinja2 → HTML → WeasyPrint → PDF, A4, 18mm margins, hand-written SVG charts. Structure carries over
+from v1 with GET2 replacing the work-values pages and a new destination-confirmation section.
 
-### Student report (~12 pages)
+### Student report (~13 pages)
 
-1. Cover — institution logo and colour, student name, date, instrument versions.
-2. How to read this report — what it is and is not (R7), one page, plain language.
-3. Interests — hexagon, six bars, the Holland code, and the differentiation statement.
-4. What your code means — human-written interpretation from `interpretations.yaml`.
-5. Personality — five bars with provisional bands and a clear note on what "provisional" means.
-6. Trait interpretations — human-written, strengths-framed, no pathologising language.
-7. Work values — six bars, top two explained.
-8. Where interests and values agree, and where they pull apart.
-9–10. Occupation matches — local first with the Pakistani pathway, international after.
-11. Questions to bring to your counsellor — six prompts drawn from the profile.
-12. Method and attribution — instruments, licences, USDOL credit (R6), limitations.
+1. Cover.
+2. How to read this report (R7).
+3–4. Interests — hexagon, bars, code, differentiation statement, interpretation text.
+5–6. Personality — five bars, provisional bands, interpretation text.
+7. **Entrepreneurial tendency (GET2)** — five subscale bars as % of max, the band, and interpretation
+   text; page omitted entirely (not shown blank) if the module wasn't administered (R10 fallback).
+8–9. Occupation matches — local first, entrepreneurial-track additions labelled per §8.
+10. **Your confirmed direction(s)** — NEW. The 1–3 `career_directions` your psychologist selected
+    with you, each with its short rationale in the psychologist's words. This page did not exist in
+    v1 and is now the page a student is most likely to actually keep.
+11. Where interests, personality and entrepreneurial tendency agree or pull against each other.
+12. Questions to bring to your counsellor.
+13. Method and attribution — instruments, licences, USDOL and Caird/OU credit (R6), review process
+    disclosure, limitations.
 
-The counsellor's copy is the same PDF plus a flags appendix. Two renders, one template, a
-`show_flags` boolean.
+The counsellor's copy adds a flags appendix (unchanged from v1) and, new, a one-page review summary
+(who reviewed, when, interview mode) for the institution's own records.
 
 ### Cohort report (~8 pages)
 
-Cover · headline numbers · completion and exclusions · Holland distribution · congruence by field
-(the headline table) · value conflicts · follow-up list · method page.
-
-### Template versioning
-
-`template_version` in `reports` and on the last page. When you change a template, old reports stay
-reproducible because the version is recorded and the raw responses still exist (R1).
+Unchanged structure from v1, with the completion table addition noted in §10.
 
 ---
 
-## 14. Email
+## 15. Email
 
-`engine/app/email.py`, provider behind an interface so Resend can be swapped in an hour.
+Unchanged from v1 (`invite`, `reminder`, `job_failed_alert`) with two changes:
 
 | Template | Trigger | Contains |
 |---|---|---|
-| `invite` | counsellor sends invites | what it is, ~25 min, the link, who sees results |
-| `reminder` | 72 h, not started (counsellor-triggered) | one nudge only, ever |
-| `student_report` | report rendered | 7-day signed link, not an attachment |
-| `counsellor_digest` | cohort hits 100% or counsellor asks | completion summary, link to dashboard |
-| `job_failed_alert` | attempts ≥ 5 | to you, with the job id |
+| `results_in_review` | NEW — `scores` written | to the student: results received, a counsellor will review, no report yet |
+| `student_report` | report rendered (now only reachable post-confirmation) | 7-day signed link |
+| `review_backlog_alert` | NEW — session `pending_review` > 5 days | to org_admin + you, per §9.4 |
 
-Rules: never attach a student PDF to email (mail servers keep copies forever); always a signed URL
-that expires. Every email carries the institution's name so a parent knows why it arrived. One
-reminder maximum — a tool that nags students is a tool a school drops.
+Never a PDF attachment (R8/§16); a signed URL, expiring in 7 days.
 
 ---
 
-## 15. Privacy, consent and minors
+## 16. Privacy, consent and minors
 
-**Most participants in a school cohort are under 18.** This is not a compliance footnote; it is the
-thing that ends the business if handled carelessly.
-
-- **Consent before items**, in plain language, on screen, recorded with a timestamp. A student may
-  decline, and declining is visible to nobody.
-- **Disclose the audience up front:** the student gets the full report; their counsellor at
-  <institution> gets the full report and quality flags; the institution gets aggregates. Nothing
-  goes anywhere else. Say this on the consent screen in those words.
-- **School consent is the institution's job, not yours.** Require the counsellor to confirm in the
-  dashboard that guardian consent is in place for participants under 18, before invites can be sent.
-  Store that confirmation with the counsellor's identity and timestamp in `audit_log`.
-- **Norming use is opt-in and separate.** A checkbox, unticked by default, for anonymised inclusion
-  in norm tables. Norms use scale scores stripped of name, email and `external_ref`, keyed to a
-  random id. If the student declines, they still get their report.
-- **Retention:** raw responses kept while the institution's account is active plus 24 months, then
-  anonymised for norms and stripped of identifiers. Publish this on the site before the first pilot.
-- **Deletion:** a documented path for a student or guardian to request removal, reaching a real
-  address you monitor. Removal deletes participant, session, responses, scores and report.
-- **Never** send a student's individual results to a parent, employer or third party — even when
-  the institution asks. Say so in the pilot agreement and hold the line.
-- **Storage:** report PDFs in a private bucket, signed URLs only, 7-day expiry, no public bucket ever.
+Unchanged from v1 in substance, with the consent screen wording addition from §13 and one new
+retention point: `reviews.interview_notes` is the psychologist's clinical-adjacent working notes,
+not exam-style feedback — treat it with the same access restriction as health data even though it
+isn't health data (R7): visible to the reviewing psychologist and org_admin only, never to a
+counsellor without the psychologist role, never in the student-facing report beyond the rationale
+line the psychologist explicitly chooses to include on the confirmed-direction page.
 
 ---
 
-## 16. Build order — milestones
+## 17. Build order — milestones
 
-Roughly twenty hours per week for twelve weeks. Each milestone ships something testable. Do not
-start a milestone before the previous one's test passes.
+Roughly twenty hours a week. Twelve milestones, now **~15 weeks / ~300 hours** — v2's added scope
+(§19) is real and the honest move is to extend the calendar, not to quietly drop the psychologist
+step or GET2 under schedule pressure. Do not start a milestone before the previous one's test
+passes.
 
 ### M0 — Repo and skeleton *(week 1, ~4 h)*
-Create the repo, both apps, `.env` templates, CI that runs lint + tests on push.
-**Done when:** `pytest` and `next build` both pass on an empty project in CI.
+Unchanged from v1. **Done when:** `pytest` and `next build` pass in CI on an empty project.
 
-### M1 — Instrument data loaded *(week 1, ~10 h)*
-Download the three instruments (R2). Write `data/instruments/*.csv` and `values_scoring.json`.
-Migration `0001_init.sql`. `scripts/load_instruments.py` is idempotent.
-**Done when:** `select count(*) from items` returns 130 and re-running the loader changes nothing.
+### M1 — Instrument data loaded *(weeks 1–2, ~14 h — was 10h in v1)*
+Download/transcribe all three instruments including GET2 (R2, §6.3). **This is also when you send
+the GET2 permission email (R10, §20 item 1) — do it in week 1, not week 10, since the reply time is
+outside your control.** Migrations `0001_init.sql` + `0003_reviews.sql`.
+**Done when:** `select count(*) from items` matches your transcribed counts across all instruments
+and the loader is idempotent.
 
-### M2 — Scoring engine, offline *(week 1–2, ~16 h)*
-`scoring/*` as pure functions plus tests. No web, no database.
-**Done when:** every §17.1 test passes, including the WIL worked example from the published manual.
+### M2 — Scoring engine, offline *(week 2–3, ~18 h)*
+`scoring/*` including `get2.py` with the `module_not_administered` fallback path exercised by a
+test from day one (R10). No web, no database.
+**Done when:** every §18.1 test passes, including a GET2 fixture checked by hand against the
+published subscale-percentage convention.
 
-### M3 — O*NET load and matching *(week 2, ~14 h)*
-`load_onet.py`, `matching/occupations.py`, `diversify`, job-zone filter.
-**Done when:** three hand-constructed profiles (a clear I-type, a clear S-type, a flat profile)
-return sensible, non-duplicated top-15 lists, and the flat profile is flagged undifferentiated.
+### M3 — O*NET load and matching *(week 3, ~14 h)*
+Unchanged from v1, plus the `entrepreneurial_track` flag and the 3-slot carve-out from §8.
+**Done when:** a high-`entrepreneurial_flag` synthetic profile surfaces at least one
+entrepreneurial-track occupation even when its raw cosine score is mediocre.
 
-### M4 — Supabase, auth, orgs, RLS *(week 3, ~16 h)*
-Full schema, RLS policies, Next.js shell, login, org and cohort CRUD, daily keep-alive.
-**Done when:** the cross-tenant leak test (§17.3) passes and a deployed URL serves a login page.
+### M4 — Supabase, auth, orgs, RLS *(week 4, ~18 h — was 16h)*
+Full schema including `reviews`/`review_events`/`career_directions`, the R9 trigger, RLS for the two
+roles, org/cohort CRUD, daily keep-alive.
+**Done when:** the R9 trigger test (insert a `reports` row with no confirmed review → expect the
+transaction to fail) passes, and the cross-tenant leak test from v1 still passes.
 
-### M5 — Roster upload and invites *(week 3–4, ~12 h)*
-CSV validation with a preview table, participant creation, token generation, invite email.
-**Done when:** a 40-row CSV imports, 40 unique links exist, and a deliberately broken row is
-rejected with a message naming the row and the problem.
+### M5 — Roster upload and invites *(week 4–5, ~12 h)*
+Unchanged from v1. **Done when:** a 20-row CSV imports cleanly with per-row validation errors shown.
 
-### M6 — Taker flow *(week 4, ~20 h)*
-Consent, both Likert modules, the card sort with tap fallback, autosave, resume, submit.
-**Done when:** you complete all 130 items plus the sort on a real mid-range Android phone, kill the
-connection at item 60, reopen, and resume at 60 with nothing lost.
+### M6 — Taker flow *(weeks 5–6, ~22 h — was 20h)*
+Consent (with the review disclosure), both Likert modules, GET2, the progress-path and
+module-transition polish from §13, autosave, resume.
+**Done when:** you complete the full assessment on a real mid-range Android phone, kill the
+connection mid-module, reopen, and resume with nothing lost — and it does not feel like filling out
+a government form.
 
-### M7 — Job runner *(week 5, ~8 h)*
-`jobs` table, claim-with-skip-locked, retry/backoff, `/tick`, the GitHub Actions cron.
-**Done when:** submitting a session produces a `scores` row within one tick without any manual step.
+### M7 — Job runner *(week 7, ~8 h)*
+Unchanged from v1, plus `notify_psychologist` and `review_reminder` job kinds.
 
-### M8 — Student report *(weeks 5–6, ~26 h)*
-Jinja templates, SVG charts, WeasyPrint, branding, storage upload, signed-link email.
-**Done when:** a submitted session yields a branded 12-page PDF in an inbox, and every band in
-`interpretations.yaml` has human-written text with no placeholder left.
-**This is the week 6 milestone — the artifact you take to GIFT's counselling office.**
+### M8 — Psychologist review portal *(weeks 7–8, ~20 h) — NEW MILESTONE*
+`/review` queue, `/review/[session_id]` detail screen, save-draft/confirm/send-back actions,
+`review_events` audit trail.
+**Done when:** you can walk through one full session as the reviewer — read the flags, write a
+note, pick 2 directions, confirm — and a `reports` insert for that session then succeeds where it
+would have failed (R9) before confirmation.
 
-### M9 — Counsellor dashboard *(week 7, ~16 h)*
-Roster view with live status, resend invites, per-student report download, org branding settings.
-**Done when:** a counsellor can run a cohort start to finish without you touching anything.
+### M9 — Student report *(weeks 9–10, ~26 h)*
+Templates including the new confirmed-direction page (§14) and the conditional GET2 page.
+**Done when:** confirming a review in M8 produces a branded, ~13-page PDF in an inbox with no
+placeholder text anywhere and the confirmed directions rendered in the psychologist's own wording.
+**This is the milestone you take to your counsellor contacts to react to before the pilot.**
 
-### M10 — Cohort report *(week 8, ~18 h)*
-Field centroids, congruence, distributions, value conflicts, follow-up list, method page.
-**Done when:** a 40-participant synthetic cohort produces a cohort PDF whose headline congruence
-number you can recompute by hand from the raw data.
+### M10 — Counsellor dashboard *(week 11, ~14 h)*
+Roster view with the new status vocabulary (including `pending_review` backlog visibility),
+resend invites, report downloads, branding settings.
 
-### M11 — Pilot hardening *(week 9, ~10 h + the pilot itself)*
-Load-test 60 concurrent submissions. Error boundaries. An admin page showing job status. A
-one-command "rerun everything for this cohort".
-**Done when:** the GIFT pilot runs with no manual database intervention.
+### M11 — Cohort report *(week 12, ~16 h)*
+Field centroids, congruence, distributions, the completion-with-review-backlog table (§10),
+method page.
 
-### M12 — Norms, free test, pricing *(weeks 10–12, ~24 h)*
-`norms/recompute` with alpha coefficients per scale, the public RIASEC-only free test with email
-capture, pricing page, invoice-based institution signup.
-**Done when:** norms exist for your first population with `n` recorded, and you compare your alphas
-against the published figures in writing.
+### M12 — Pilot, sized to the psychologist bottleneck *(week 13, ~10 h + the pilot itself)*
+**Cap the pilot cohort at 15–25 students** (§9.3), matched to how many reviews you (or your
+psychologist design partner) can realistically complete in the pilot week. Confirm which
+counsellor/psychologist contact is playing that role before scheduling — this is now a scheduling
+dependency, not just a technical one. Load-test the number of concurrent submissions the cohort
+size implies (modest at this scale), verify the review queue under real data, and build the "rerun
+everything for this cohort" admin command.
+**Done when:** the pilot runs with every session reaching `confirmed` within a few days, not stuck
+in the queue.
 
-**Reserve week 12 for the second school and the invoice. If M12 slips, ship the invoice anyway —
-the paying customer is the milestone, the norm table is not.**
+### M13 — Norms, free test, pricing *(weeks 14–15, ~24 h)*
+`norms/recompute` with alpha coefficients, the public RIASEC-only free test, pricing page,
+invoice-based institution signup.
+**Done when:** norms exist for your first population with `n` recorded and compared in writing
+against the published Interest Profiler and IPIP alphas.
+
+**If GET2 permission (R10) hasn't cleared by M6, ship M6–M13 with the module disabled via the
+`module_not_administered` path (§6.3, §7.3) rather than blocking the whole build on an email
+reply.**
 
 ---
 
-## 17. Testing
+## 18. Testing
 
-### 17.1 Scoring — `engine/tests/`
-
-Golden fixtures in `tests/fixtures/`, one JSON per case: responses in, expected scores out.
+### 18.1 Scoring — additions to v1's table
 
 | Test | Asserts |
 |---|---|
-| `test_interests_all_max` | every scale 40, differentiation 0, band `undifferentiated` |
-| `test_interests_known_profile` | hand-computed sums, correct three-letter code |
-| `test_interests_tiebreak` | fixed R,I,A,S,E,C order, `tie_broken: true` |
-| `test_personality_reverse` | a reverse item at 1 scores 5 on a 1–5 scale |
-| `test_personality_no_hardcoded_six` | passes for a hypothetical 0–6 item |
-| `test_values_worked_example` | **matches the published WIL score-report example exactly** |
-| `test_values_invalid_sort` | 3 cards in a column raises, does not zero-fill |
-| `test_flags_straightline` | 12 identical answers flags, 11 does not |
-| `test_matching_diversity` | no more than 2 results share a 2-digit SOC group |
-| `test_matching_job_zone` | a matric student receives no Job Zone 5 occupation |
-| `test_rescore_idempotent` | rescoring twice at one version yields identical values |
+| `test_get2_subscale_percentage` | hand-computed percentage matches, against a fixture built from the transcribed item set |
+| `test_get2_not_administered_shape` | returns the `module_not_administered` shape, every downstream template branch handles it without a KeyError |
+| `test_get2_entrepreneurial_flag` | flag fires at the documented thresholds, not off by one |
+| `test_r9_trigger_blocks_unconfirmed` | inserting a student `reports` row with no `reviews.status='confirmed'` row raises |
+| `test_r9_trigger_allows_confirmed` | same insert succeeds once a confirmed review exists |
+| `test_review_rls_boundary` | a `counsellor`-only profile cannot read `reviews.interview_notes`; a `psychologist` profile can |
 
-`test_values_worked_example` is the single most important test in the repo. It is the only
-independent check that your transcription of the scoring worksheet is right.
-
-### 17.2 Report
-
-Render with a fixture session; assert the PDF has the expected page count, that no template
-placeholder string survives, and that the attribution line is present. `pdftotext` plus a substring
-check is sufficient and fast.
-
-### 17.3 Security
-
-- **Cross-tenant:** counsellor A queries cohort B's participants → 0 rows.
-- **Token:** a random token 404s; a valid token resolves; a used-and-submitted token cannot rewrite
-  responses.
-- **Service role:** CI greps the client bundle for the service-role key and fails on a hit.
-- **Engine auth:** every route without `X-Engine-Key` returns 401.
-
-### 17.4 Manual, before the pilot
-
-Run the whole flow on a real mid-range Android phone on mobile data, in a browser you have never
-tested. Then hand the phone to someone who has not seen the product and say nothing while they use
-it. Write down every place they hesitate. That list is worth more than the rest of this section.
+Everything from v1 §17.1–17.4 (interests, personality, matching, cross-tenant, token security,
+manual phone test) stands unchanged.
 
 ---
 
-## 18. Deployment runbook
+## 19. What changed in v2, and why
 
-**Web (Vercel):** link the repo, set env vars for preview and production, deploy on push to `main`.
+For anyone picking this plan up mid-build: three inputs forced a revision from the original v1
+spec — two conversations with practising wellbeing counsellors, and the "Clarity Compass" concept
+deck. Here is the delta, so nothing gets silently reverted during implementation.
 
-**Engine:** Dockerfile on Python 3.12-slim. WeasyPrint needs system libraries — install
-`libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfribidi0 libcairo2 libgdk-pixbuf-2.0-0`.
-Missing these is the number-one cause of "works locally, blank PDF in production".
+| | v1 | v2 | Why |
+|---|---|---|---|
+| Module 3 | O*NET Work Importance Locator | GET2 (entrepreneurial tendency) | WIL was retired by USDOL in June 2024 — "technical assistance is no longer available." GET2 is live, addresses a real construct, and was raised directly by your counsellor contacts. |
+| Report release | Automatic on scoring | Gated on psychologist confirmation (R9) | Counsellors were explicit: an unreviewed automated report to a minor is a liability and not what clients want. |
+| Roles | `counsellor`, `org_admin` | adds `psychologist` | The review step needs a distinct, more restricted role (§9, §16). |
+| Pilot cohort size | 40–60 students | 15–25 students | Direct consequence of one human reviewing every result (§9.3). |
+| Taker-flow polish | Functional, minimal | "Polished but conventional" — progress path, module transitions | Direct response to the fatigue concern raised by the counsellors. |
+| Phase 2 (roadmap engine) | Not addressed | Explicitly deferred to v2, specified in §21 | The deck's full vision is a second product; sequencing it after Phase 1 has a paying customer is the difference between a 12-week and a 6-month first release. |
+| Timeline | 12 weeks | ~15 weeks | Honest cost of the above, not absorbed by cutting corners elsewhere. |
 
-```dockerfile
-FROM python:3.12-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfribidi0 \
-    libcairo2 libgdk-pixbuf-2.0-0 fonts-dejavu-core \
- && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-COPY . .
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-Bundle the report's fonts into the image. Do not rely on a Google Fonts fetch at render time — the
-PDF will silently fall back and look wrong, and only on production.
-
-**Database:** apply migrations in order through the Supabase SQL editor or the CLI. Never edit a
-migration that has run; add a new one.
-
-**Pilot-day checklist**
-
-1. Run `workflow_dispatch` on the tick workflow 30 minutes before, and confirm `/health` is 200.
-2. Confirm the Supabase project is not paused.
-3. Generate one test report end to end that morning.
-4. Have the invite links on a printed sheet or a QR code — campus wifi will fail at the wrong moment.
-5. Watch the admin job page during the session.
+Two items MBTI and the Gordon Occupational Checklist II, also raised in conversation, were
+considered and rejected: MBTI requires written permission and certification fees from The
+Myers-Briggs Company; the Gordon Occupational Checklist II is 1981 Pearson copyright (a library
+holding a physical copy, as GIFT's does, is not a licence to reproduce it in software). Neither is
+compatible with R2.
 
 ---
 
-## 19. Open items needing a human decision
+## 20. Open items needing a human decision
 
-These block specific milestones. None can be answered from code.
+1. **Send the GET2 permission email this week.** R10 blocks M13 (pricing/sales) and should not
+   block M1–M12 (build with the module active, labelled provisional). Contact The Open University's
+   Open Research Online team or Dr. Sally Caird directly; ask specifically about use in a commercial,
+   white-label student-assessment platform, and get the exact attribution wording they want.
+2. **Pin the GET2 item count and response scale from the primary source** (§6.3) — the commonly
+   cited "54 items, 3-point scale" was not independently verified while writing this plan.
+3. **Who plays the psychologist role for the pilot** — you, one of the two counsellors you already
+   spoke with, or someone at GIFT. This is now a scheduling dependency for M12, not just a technical
+   one, and it caps the pilot at 15–25 students (§9.3, §17 M12).
+4. **`intended_field` controlled vocabulary** — unchanged from v1, still blocks M5 and M11.
+5. **Which GIFT department and when** — unchanged from v1, sets the M12 calendar.
+6. **Education-level → Job Zone mapping** — unchanged from v1, confirm against real outcomes.
+7. **Institution pricing for school two** — unchanged from v1, decide before week 14.
+8. **Guardian-consent wording, updated for the review disclosure (§13, §16)** — should be reviewed by
+   someone at GIFT or by your two counsellor contacts, not drafted solo.
+9. **The $5/month decision** — unchanged from v1.
 
-1. **`intended_field` controlled vocabulary** — blocks M5 and all of M10. Needs the real list your
-   students choose from: Pre-Medical, Pre-Engineering, ICS, Commerce, Humanities, and the degree
-   programmes downstream. Wrong list, worthless cohort report.
-2. **Which GIFT department and when** — blocks M11 scheduling and sets the whole calendar.
-3. **Education-level → Job Zone mapping** — the §8 defaults are a guess. Confirm against what your
-   students actually go on to do.
-4. **Institution pricing for school two** — blocks M12. Decide before week 11, not during the call.
-5. **Guardian-consent wording** — should be reviewed by someone at GIFT who knows what the
-   institution requires. Do not draft this alone.
-6. **The $5/month decision** — if yes, the engine moves to a paid hobby tier at M8 and cold-start
-   handling stops mattering. If no, M11 must include a documented warm-up procedure.
+---
+
+## 21. Deferred to v2 — Phase 2, the navigation engine
+
+Specified here so the vision isn't lost, and explicitly **not** built in this plan. Revisit once
+Phase 1 has a paying institution and real usage data — both because the sequencing makes financial
+sense and because Phase 2's design should be informed by which occupation matches and directions
+actually get confirmed in practice, which you don't have yet.
+
+From the Clarity Compass deck, Phase 2 ("Navigate there") comprises:
+
+- **O*NET-powered roadmap generation** — once a `career_directions` row is confirmed, pull the
+  occupation's required skills, certifications and typical progression from O*NET and turn it into
+  a personalised, timestamped milestone plan (courses, projects, certifications, internships).
+- **Adaptive rerouting** — the "Google Maps for careers" mechanic: a missed milestone, a changed
+  goal, a failed course, or a delayed semester triggers a recalculation from the student's current
+  position, never from zero.
+- **Progress tracking and notifications** — a student-facing dashboard of milestone status, plus
+  deadline reminders and next-action nudges.
+- **LMS connector and university-scale analytics** — institutional reporting on engagement and
+  "career readiness," and a integration point for a school's existing learning-management system.
+
+None of this is small. Each bullet above is roughly its own milestone-sized body of work, and the
+adaptive-rerouting logic in particular deserves its own design pass once you've seen how often real
+students actually change direction — a number you'll only have after Phase 1 ships. When you're
+ready to scope it, treat this section as the brief and write it up the same way this document
+treats Phase 1: rules, schema, milestones, tests — not before.
 
 ---
 
 ## Appendix A — Commands
+
+Unchanged from v1.
 
 ```bash
 # engine
@@ -1167,12 +916,19 @@ supabase db push
 
 ## Appendix B — Definition of done for v1
 
-- [ ] A counsellor uploads a 40-row roster and sends invites without help.
-- [ ] 40 students complete on their own phones; ≥ 90% finish in one sitting.
-- [ ] 40 branded student PDFs are delivered by email automatically.
+- [ ] A counsellor uploads a 15–25 row roster and sends invites without help.
+- [ ] Students complete on their own phones; ≥ 90% finish in one sitting.
+- [ ] Every completed session reaches `pending_review` automatically.
+- [ ] A psychologist works the queue end to end: reads flags, writes notes, confirms 1–3 directions.
+- [ ] No `reports` row for a student ever exists without a confirmed `reviews` row (R9, enforced by
+      the database trigger, not just application code).
+- [ ] Branded student PDFs, including the confirmed-direction page, are delivered by email
+      automatically post-confirmation.
 - [ ] A cohort PDF states a congruence rate you can recompute by hand.
-- [ ] `rescore_all.py` reruns every session and changes nothing at the same engine version.
-- [ ] Cross-tenant and token security tests pass in CI.
+- [ ] `rescore_all.py` reruns every session and changes nothing at the same engine version, and does
+      not re-trigger report delivery for already-confirmed sessions.
+- [ ] Cross-tenant, token, and review-RLS-boundary security tests pass in CI.
 - [ ] Every interpretation string is human-written; no placeholder survives.
-- [ ] O*NET attribution appears on every report and on the site.
+- [ ] O*NET and GET2/Caird attribution appears on every report and on the site.
+- [ ] GET2 permission status (R10) is resolved — confirmed, or the module is cleanly disabled.
 - [ ] A second school has been invoiced.

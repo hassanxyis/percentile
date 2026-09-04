@@ -7,6 +7,7 @@ nothing else. Real item text arrives in data/instruments/*.csv.
 
 import pytest
 
+from app.scoring.get2 import GET2_SUBSCALES
 from app.scoring.interests import RIASEC
 from app.scoring.personality import BIG_FIVE
 from app.scoring.types import Item
@@ -58,6 +59,23 @@ def personality_items(per_domain: int = 10) -> list[Item]:
             )
             ordinal += 1
     return items
+
+
+def get2_scoring(per_scale: int = 4, max_raw: int = 8) -> dict:
+    """A structurally valid stand-in for get2_scoring.json.
+
+    Real item groupings and maxima are transcribed from Caird's published
+    guide (R2); this exists only to exercise the code paths.
+    """
+    return {
+        "subscales": {
+            scale: {
+                "items": [f"GET2_{scale.upper()[:3]}_{n:02d}" for n in range(1, per_scale + 1)],
+                "max_raw": max_raw,
+            }
+            for scale in GET2_SUBSCALES
+        }
+    }
 
 
 @pytest.fixture

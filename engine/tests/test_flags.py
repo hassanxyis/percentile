@@ -6,6 +6,13 @@ from app.scoring.flags import compute_flags, warn_count
 
 from .conftest import interest_items, personality_items, uniform
 
+GET2_EVEN = {
+    "achievement": 50, "autonomy": 51, "creativity": 49, "risk_taking": 50, "control": 52,
+}
+GET2_SPREAD = {
+    "achievement": 20, "autonomy": 80, "creativity": 45, "risk_taking": 60, "control": 30,
+}
+
 
 def codes(flags: list[dict]) -> set[str]:
     return {f["code"] for f in flags}
@@ -148,18 +155,34 @@ def test_same_day_submission_does_not_flag():
     assert "long_gap" not in codes(flags)
 
 
-# ── fallback card sort ───────────────────────────────────────────────────────
+# ── get2 uniform response ────────────────────────────────────────────────────
 
 
-def test_tap_fallback_is_info_only():
-    """The tap-to-place fallback is a first-class interface, not a failure —
-    it is the real interface for many mid-range Android students (plan §12)."""
+def test_get2_uniform_response_flags():
+    """All five subscales within a few points of each other usually means the
+    respondent clicked through without engaging (plan §7.4)."""
     items = interest_items()
 
-    flags = compute_flags(varied(items), items, sort_used_fallback=True)
+    flags = compute_flags(varied(items), items, get2_subscales=GET2_EVEN)
 
-    sort_flag = next(f for f in flags if f["code"] == "incomplete_sort")
-    assert sort_flag["severity"] == "info"
+    assert "get2_uniform_response" in codes(flags)
+
+
+def test_get2_spread_response_does_not_flag():
+    items = interest_items()
+
+    flags = compute_flags(varied(items), items, get2_subscales=GET2_SPREAD)
+
+    assert "get2_uniform_response" not in codes(flags)
+
+
+def test_get2_not_administered_produces_no_flag():
+    """Absence of the module is not a quality signal."""
+    items = interest_items()
+
+    assert "get2_uniform_response" not in codes(
+        compute_flags(varied(items), items, get2_subscales=None)
+    )
 
 
 # ── exclusion rule ───────────────────────────────────────────────────────────
@@ -178,6 +201,8 @@ def test_two_warns_trigger_exclusion_threshold():
 
 
 def test_info_flags_alone_do_not_exclude():
+    """long_gap is the only info-severity flag; on its own it must not exclude
+    a participant from cohort aggregates."""
     items = interest_items()
     start = datetime(2026, 9, 1, 9, 0)
 
@@ -186,10 +211,9 @@ def test_info_flags_alone_do_not_exclude():
         items,
         started_at=start,
         submitted_at=start + timedelta(hours=72),
-        sort_used_fallback=True,
     )
 
-    assert len(flags) == 2
+    assert len(flags) == 1
     assert warn_count(flags) == 0
 
 

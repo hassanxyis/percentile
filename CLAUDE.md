@@ -8,7 +8,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 and the tests that prove each one. It is authoritative; this file only summarises what is
 hard to discover by reading code. When the two disagree, `plan.md` wins.
 
-`plan.md` §0 lists eight non-negotiable rules. Four of them change what you are allowed to
+`plan.md` is v2, revised after two conversations with practising wellbeing counsellors and
+against the "Clarity Compass" concept deck. If you see references to a Work Importance
+Locator / card-sort values module anywhere (code, old commits, your own assumptions) — that
+was v1. It is retired; module 3 is now **GET2** (`engine/app/scoring/get2.py`), entrepreneurial
+tendency. See `plan.md` §19 for the full diff and why.
+
+`plan.md` §0 lists ten non-negotiable rules. Six of them change what you are allowed to
 write, and are repeated here because violating them silently produces working code that
 destroys the product's credibility:
 
@@ -16,21 +22,36 @@ destroys the product's credibility:
   responses that produced it. Every session must be rescoreable with one command.
   `scores` and `occupation_matches` are keyed by `(session_id, engine_version)` precisely so
   a rescore writes a new row beside the old one instead of overwriting history.
-- **R2 — Never invent instrument items.** O*NET and IPIP item text is downloaded into
-  `data/instruments/*.csv`, never generated, paraphrased, reordered or "improved". A
-  paraphrased item is a different item with unknown properties. All code reads items from
-  the database and must work with an empty `items` table.
-- **R3 — Interpretation text is human-written.** `engine/app/content/interpretations.yaml`
-  is written by a person with psychology training. Draft product copy, error messages and
-  docs freely; never the report's interpretive content.
+- **R2 — Never invent instrument items.** Interest Profiler items from onetcenter.org, IPIP
+  items from ipip.ori.org, GET2 items from Sally Caird's published guide — downloaded or
+  transcribed into `data/instruments/*.csv`, never generated, paraphrased, reordered or
+  "improved". A paraphrased item is a different item with unknown properties. All code reads
+  items from the database and must work with an empty `items` table.
+- **R3 — Interpretation text is human-written, and a human reviews every result.**
+  `engine/app/content/interpretations.yaml` is written by a person with psychology training.
+  New in v2: a psychologist also reviews every individual session's machine output before a
+  student report can render — that's R9 below. Draft product copy, error messages and docs
+  freely; never the report's interpretive content, and never anything presented as the
+  psychologist's own clinical judgement.
 - **R4 — No percentiles until local norms exist.** Until a `norms` row for the population
   reaches `n >= 300`, reports show raw scores and provisional bands with
   `norms_status: "pending_local_norms"`. Never display US percentiles for Pakistani students.
+- **R9 — No final report leaves the system without human sign-off.** A session cannot reach
+  `reports` (student kind) until a `reviews` row exists with `status = 'confirmed'`
+  (`db/migrations/0003_reviews.sql`, §9). Enforced by a database trigger
+  (`trg_enforce_review_before_student_report`), not just application code — treat any code
+  path that bypasses it as a severity-1 bug.
+- **R10 — GET2 use is provisional until written permission is confirmed.** Label GET2 output
+  `"provisional — pending permission"` internally and keep it out of sales material until
+  then. If permission is refused, the module disables via the `module_not_administered`
+  shape (`score_get2(responses, scoring=None)`) — every downstream template must already
+  handle that shape without a KeyError, not add the branch later under deadline pressure.
 
-Also load-bearing: **R6** puts O*NET/USDOL attribution on every report page and in the site
-footer (a licence term); **R7** forbids clinical language anywhere in report, UI or marketing
-copy; **R8** means response-quality flags appear only on the counsellor's copy, never the
-student's.
+Also load-bearing: **R6** puts O*NET/USDOL and GET2/Caird-OU attribution on every report page
+and in the site footer (a licence term); **R7** forbids clinical language anywhere in report,
+UI or marketing copy — the psychologist review step is never described as therapy or a
+clinical service; **R8** means response-quality flags appear on the psychologist's review
+screen and the counsellor's cohort copy, never the student's own report.
 
 ## Commands
 
@@ -83,6 +104,13 @@ server-side code. Everything else flows through the `jobs` table.
 All persistent state lives in Supabase; the engine host holds nothing. Moving the engine to
 another provider must stay an afternoon's work.
 
+**v2 adds a human checkpoint between scoring and reporting (R9).** Scoring still lands
+automatically and enqueues `notify_psychologist`, not `render_student`. A session sits in
+`pending_review` until a psychologist works the `/review` queue and confirms 1–3
+`career_directions`; only then does `render_student` get enqueued, and the database trigger
+in `0003_reviews.sql` refuses the insert otherwise. `POST /render/student/{session_id}`
+returns 409 if `reviews.status != 'confirmed'`.
+
 ### Scoring is pure
 
 `engine/app/scoring/*` takes raw responses in and returns score dicts — no database access
@@ -110,9 +138,18 @@ Students are never authenticated. The taker flow reaches the database only throu
 actions that resolve `sha256(token) → participants.invite_token_hash` using the service
 role. **Those actions must never accept a `participant_id` from the client — only a token.**
 
-`db/migrations/0002_rls.sql` enables RLS on all sixteen tables. `jobs` and `audit_log`
-deliberately have no policy at all: RLS denies by default, so the service role keeps sole
-access. That silence is intentional — do not add a policy there without writing down why.
+`db/migrations/0002_rls.sql` enables RLS on all sixteen v1 tables; `0003_reviews.sql` adds
+three more (`reviews`, `review_events`, `career_directions`) plus a `psychologist` role.
+`jobs` and `audit_log` deliberately have no policy at all: RLS denies by default, so the
+service role keeps sole access. That silence is intentional — do not add a policy there
+without writing down why.
+
+`reviews.interview_notes` gets the same treatment by different means: a `counsellor` profile
+must never read it, only `psychologist`/`org_admin`/`superadmin`. Since RLS is row-scoped, not
+column-scoped, a counsellor gets **no** SELECT policy on `reviews` at all — only the narrow
+`review_progress_for_session()` SECURITY DEFINER function, which returns `status` and
+`confirmed_at` only. Do not "simplify" this into a second row-level policy on `reviews` — that
+reopens the exact leak the split exists to prevent.
 
 Most participants are under 18. `plan.md` §15 is not a compliance footnote; read it before
 touching consent, retention, deletion or anything that sends data outward.
