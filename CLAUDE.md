@@ -2,6 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Where the build is
+
+**M0–M5 are done. M6 (the taker flow) is next.** `plan.md` §17 carries the detail; the short
+version:
+
+A counsellor can sign in, create a cohort, upload a roster CSV, and see 20 students land as
+`invited`. Auth, RLS, the R9 trigger and roster import are all covered by tests that run against a
+real Postgres in CI.
+
+Two things are deliberately not built yet, and both matter before you touch anything invite-shaped:
+
+- **`web/app/a/[token]/` does not exist**, so every invite link 404s. That is M6.
+- **Nothing sends email.** `engine/app/email.py` does not exist; `resend_api_key` sits unused in
+  `engine/app/config.py`. M5 enqueues `send_email` jobs and the runner that drains them is M7. Do
+  not wire Resend before M6 ships — invites would carry links to a 404.
+
+The live Supabase project already holds one organisation, one `org_admin`, one cohort, 20
+participants and 20 queued jobs from M5's verification run. Useful test data; not something to
+clean up.
+
 ## Read plan.md first
 
 `plan.md` is the complete build spec — schema, scoring formulas, API contract, milestones,
@@ -215,6 +235,31 @@ touching consent, retention, deletion or anything that sends data outward.
 - **Statistical honesty (`plan.md` §9):** never print a percentage on a denominator below 10
   without the denominator beside it; never compare cohorts without both `n`s; the report says
   "classed misaligned by this instrument", never "in the wrong field".
+
+## Starting M6 — the taker flow
+
+The student side has no auth session and no DAL. `web/lib/dal.ts` is for counsellors; do not reach
+for it in `app/a/[token]/`.
+
+**The token is the whole of a student's authentication.** A server action resolves
+`sha256(token) → participants.invite_token_hash` using the service role, and — quoting
+`0002_rls.sql`'s header — those actions "must never accept a `participant_id` from the client, only
+a token." Accepting an id from the request would let anyone read or write any student's session by
+guessing a uuid. This is the single rule in M6 that must not be got wrong.
+
+Tokens are 256-bit base64url, minted in `web/app/dash/cohorts/[id]/upload/actions.ts`. Only the
+sha256 is stored, so a token cannot be looked up or recovered — it can only be checked.
+
+**GET2 cannot be administered yet.** `data/instruments/get2_items.csv` and `get2_scoring.json` are
+absent (plan §20 item 2 — the item count and response scale were never pinned from the primary
+source), so `instruments` has no `get2` row and `load_instruments.py` skips it with a warning.
+Build module 3 against the `module_not_administered` shape `score_get2` already returns; two
+modules is the shape that ships. Adding GET2 later should be loading a file, not editing the taker
+flow — R10 says the code must not assume GET2 is guaranteed.
+
+`participants.status` moves `invited → started` on consent, `started → submitted` on the last item
+(plan §5). The consent screen must disclose the psychologist review step in plain language (§13,
+§16), and R7 forbids describing it as therapy or a clinical service.
 
 ## The roster CSV and `intended_field`
 

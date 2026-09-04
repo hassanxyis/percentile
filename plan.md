@@ -728,6 +728,22 @@ Roughly twenty hours a week. Twelve milestones, now **~15 weeks / ~300 hours** �
 step or GET2 under schedule pressure. Do not start a milestone before the previous one's test
 passes.
 
+> **Progress: M0–M5 complete. M6 is next.**
+>
+> M0–M3 built the repo, the instrument loader, the pure scoring modules and O*NET matching.
+> M4 added auth, RLS and the R9 trigger, with 18 database tests proving them against a real
+> Postgres in CI. M5 added roster import: a counsellor signs in, creates a cohort, uploads a CSV,
+> and gets 20 `invited` participants plus one queued `send_email` job each.
+>
+> Verified against the live Supabase project, not only in CI: a deliberately broken 20-row file
+> reported six errors on rows 4, 5, 6, 7, 8 and 10 — spreadsheet line numbers, all at once, nothing
+> imported — then a clean file imported 20 students.
+>
+> **Nothing sends email yet.** `engine/app/email.py` does not exist and the job runner is M7, so
+> the queued invites sit unclaimed. **`/a/[token]` does not exist either** — it is M6, and until it
+> does, every invite link 404s. That ordering is deliberate: sending invites before the taker flow
+> exists would put a broken link in twenty students' inboxes.
+
 ### M0 — Repo and skeleton *(week 1, ~4 h)*
 Unchanged from v1. **Done when:** `pytest` and `next build` pass in CI on an empty project.
 
@@ -755,12 +771,47 @@ roles, org/cohort CRUD, daily keep-alive.
 **Done when:** the R9 trigger test (insert a `reports` row with no confirmed review → expect the
 transaction to fail) passes, and the cross-tenant leak test from v1 still passes.
 
-### M5 — Roster upload and invites *(week 4–5, ~12 h)*
+### M5 — Roster upload and invites *(week 4–5, ~12 h)* — **DONE**
 Unchanged from v1. **Done when:** a 20-row CSV imports cleanly with per-row validation errors shown.
 
-### M6 — Taker flow *(weeks 5–6, ~22 h — was 20h)*
+Two things in this milestone were *decided*, not inherited — v2 says "unchanged from v1 §12" and
+the v1 document is not in the repository:
+
+- **The roster CSV format** now lives in `web/lib/roster-csv.ts`. `full_name` and `email` required;
+  `external_ref` / `intended_field` / `education_level` optional; unknown columns ignored;
+  `utf-8-sig` because schools export from Excel. Errors are collected per row, not raised on the
+  first, and import is all-or-nothing.
+- **The `intended_field` vocabulary** (§20 item 4, which named this as blocking M5 *and* M11) is a
+  12-value starter list in `web/lib/intended-fields.ts`. **Revise it with a counsellor before the
+  pilot** — changing a value after real imports orphans those rows.
+
+Import goes through `import_roster()` (`db/migrations/0005_import_roster.sql`) so participants,
+jobs and the audit row land in one transaction. See §12 for the constraint this places on M7.
+
+### M6 — Taker flow *(weeks 5–6, ~22 h — was 20h)* — **NEXT**
 Consent (with the review disclosure), both Likert modules, GET2, the progress-path and
 module-transition polish from §13, autosave, resume.
+
+**Where M5 left it.** `web/app/a/[token]/` does not exist, so every invite link currently 404s —
+this is the milestone that fixes that. Twenty `invited` participants and twenty queued
+`send_email` jobs are already in the database from M5's verification run; they are useful test
+data, not a problem to clean up.
+
+**Start here.** The token is the student's entire authentication (§5, `0002_rls.sql`): resolve
+`sha256(token) → participants.invite_token_hash` in a server action using the service role, and
+**never accept a `participant_id` from the client** — that rule is in `0002_rls.sql`'s header and
+is the one thing in this milestone that must not be got wrong. `web/lib/dal.ts` is for
+counsellors and does not apply here; students are never authenticated and get no Supabase session.
+
+**GET2 is not loadable yet.** `data/instruments/get2_items.csv` and `get2_scoring.json` are absent
+(§20 item 2 — the item count and response scale were never pinned from the primary source), so
+`instruments` has no `get2` row and `load_instruments.py` skips it with a warning. Build the
+module-3 path against the `module_not_administered` shape that `score_get2` already returns and
+`test_get2.py` already covers, and treat the two-module assessment as the shape that ships. Adding
+GET2 later is then loading a file, not editing the taker flow.
+
+`participants.status` moves `invited → started` on consent and `started → submitted` on the final
+item; §5's state machine is the reference.
 **Done when:** you complete the full assessment on a real mid-range Android phone, kill the
 connection mid-module, reopen, and resume with nothing lost — and it does not feel like filling out
 a government form.
