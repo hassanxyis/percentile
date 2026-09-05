@@ -909,12 +909,20 @@ at send time (§12), so **every link from M5's one-time download stops working
 the moment the first tick runs**. That is the intended precedence, but it means
 the 20 live participants get new links and any link already handed out is dead.
 
-### M8 — Psychologist review portal *(weeks 7–8, ~20 h) — NEW MILESTONE*
+### M8 — Psychologist review portal *(weeks 7–8, ~20 h)* — **DONE (pending a walk-through)**
 `/review` queue, `/review/[session_id]` detail screen, save-draft/confirm/send-back actions,
 `review_events` audit trail.
+
+All three actions go through `save_review()` (`db/migrations/0009_review_actions.sql`), which is
+the only writer for `reviews`, `career_directions` and `review_events` — and the only place
+`render_student` is ever enqueued (R9).
+
 **Done when:** you can walk through one full session as the reviewer — read the flags, write a
 note, pick 2 directions, confirm — and a `reports` insert for that session then succeeds where it
 would have failed (R9) before confirmation.
+*`engine/tests/db/test_review_actions.py::test_confirming_unblocks_the_r9_gate` asserts exactly
+that sentence, and CI runs it against a real Postgres. The human half — a psychologist actually
+sitting with the screen — has not happened; Fatima Khan is the seed case waiting for it.*
 
 ### M9 — Student report *(weeks 9–10, ~26 h)*
 Templates including the new confirmed-direction page (§14) and the conditional GET2 page.

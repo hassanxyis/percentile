@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Where the build is
 
-**M0–M7 are written, tested and LIVE. The engine is on Render; the web app is on Vercel.
-M8 (the psychologist review portal) is next — `web/app/review` does not exist, so `/review`
-404s.** `plan.md` §17 carries the detail; the short version:
+**M0–M8 are written and tested; M0–M7 are LIVE. The engine is on Render; the web app is on
+Vercel. M9 (the student report) is next — `render_student` jobs now queue and fail with
+"not implemented until M9", which is the intended shape.** `plan.md` §17 carries the detail;
+the short version:
 
 A counsellor can sign in, create a cohort and upload a roster CSV. A student can open their invite
 link, consent, answer both modules on a phone, close the tab mid-way, come back and resume where
@@ -47,18 +48,15 @@ A manual tick has been verified against the live engine: `/health` → `{"status
   should wait until M9's `render_student` exists — confirming a session in M8 enqueues
   `render_student`, and no handler for it is implemented yet.
 
-**Start here: M8 — the psychologist review portal.** No `web/app/review` directory exists.
-Build `/review` (queue, org-scoped, `role = 'psychologist'`/`org_admin` only, oldest first)
-and `/review/[session_id]` (detail) per `plan.md` §9: student name/cohort/intended field/time
-since submission; all engine output — interest hexagon, personality bars, GET2 subscales or
-`not administered`, the top-15 occupation matches (Fatima's are present), and every quality
-flag with its plain-language meaning; a free-text `interview_notes` field (R3 — never
-model-generated); a 1–3 `career_directions` picker with a rationale field each; and
-Save-draft (`in_progress`) / Confirm (`confirmed`, enqueues `render_student`) / Send-back
-(`needs_more_info`) actions, with a `review_events` audit trail. **Done-when:** confirming a
-session makes a `reports` insert succeed where it failed before (the R9 trigger). The db tests
-asserting that trigger already pass in CI; the pages and their server actions are what is
-missing.
+**M8 is built (`web/app/review/`, `db/migrations/0009_review_actions.sql`).** The queue, the
+detail screen and all three actions exist; `engine/tests/db/test_review_actions.py` asserts
+M8's done-when — a `reports` insert fails before confirmation and succeeds after.
+
+**Start here: M9 — the student report.** `render_student` jobs are now being queued by the
+confirm action and fail with "job kind 'render_student' is not implemented until M9"
+(`handlers/__init__.py`'s `NOT_YET_IMPLEMENTED`). That failure is the queue doing its job, not
+a bug: the work is recorded and waiting for a handler. See `plan.md` §14 for the ~13-page
+student report and R6's attribution requirement on every page.
 
 ## Read plan.md first
 
@@ -247,13 +245,30 @@ Accounts are invite-only (`web/app/dash/settings/actions.ts`). There is no signu
 and `role` — and `role` is what gates `reviews.interview_notes`, the notes about a minor that §16
 says to treat like health data. An institution's first admin is seeded by hand.
 
-Staff invites ride **Supabase Auth**, not the engine's Resend path: `inviteMember` calls
-`inviteUserByEmail(email, { redirectTo: $NEXT_PUBLIC_APP_URL/auth/callback?next=/dash })`, the
-accept link opens Supabase's hosted set-password page, and GoTrue then redirects to the app's
-`web/app/auth/callback/route.ts`, which exchanges the one-time code for a session cookie and
-lands the new member in `/dash`. Supabase's **Site URL / Redirect URLs** must include the
-deployed origin for the fallback redirect to work. The "You've been invited … Accept
-invitation" mail is Supabase's built-in template (editable under Auth → Emails); the engine's
+Staff invites ride **Supabase Auth**, not the engine's Resend path. Two things about that flow
+are counter-intuitive, and both were got wrong once already:
+
+- **There is no hosted set-password page.** Supabase creates the auth user and mails a link;
+  accepting it proves the address and establishes a session, and that is all. The account has
+  no password, and `login/actions.ts` only calls `signInWithPassword` — so without
+  `web/app/auth/set-password/` an invited colleague can open the app exactly once, from the
+  emailed link, and never sign in again.
+- **The link carries a token hash, not a `?code`.** `exchangeCodeForSession` is the OAuth/PKCE
+  path and cannot work here: PKCE needs a `code_verifier` cookie from a flow the invitee's
+  browser never started. Email links are verified with `verifyOtp({ type, token_hash })`, which
+  is what `web/app/auth/confirm/route.ts` does. A default `{{ .ConfirmationURL }}` link returns
+  its tokens in the **URL fragment**, which is never sent to the server, so a route handler
+  cannot read it at all.
+
+The chain is: `inviteMember` → `inviteUserByEmail(email, { redirectTo: .../auth/set-password })`
+→ the invite email's link → `/auth/confirm` (verifyOtp) → `/auth/set-password` → `/dash`.
+
+**This requires a dashboard change that no code can make.** The "Invite user" template
+(Authentication → Email Templates) must point at `/auth/confirm` with `{{ .TokenHash }}` — the
+exact markup is in `confirm/route.ts`'s header. `{{ .TokenHash }}` only appears if the template
+asks for it, so until that is saved, invitations still land on `/login` with no session.
+`redirectTo` must also be listed under Authentication → URL Configuration → Redirect URLs, or
+Supabase silently falls back to Site URL. The engine's
 `{organisation}: your careers questionnaire` invite is a separate system for students.
 
 `db/migrations/0002_rls.sql` enables RLS on all sixteen v1 tables; `0003_reviews.sql` adds
@@ -375,6 +390,45 @@ logs `NOT SENT` at WARNING and reports success. Raising would make a local tick 
 times; a silent no-op would let someone drain twenty invites and believe they were sent. There is
 deliberately no second `EMAIL_ENABLED` flag — two switches means a deployment can hold a real key
 and still send nothing.
+
+## The review portal (`web/app/review/`)
+
+M8. The human checkpoint R9 requires: a psychologist reads the engine's output, writes their own
+notes, picks 1–3 career directions, and confirms — and only that confirm releases the student's
+report.
+
+**Every write goes through `save_review()` (`0009_review_actions.sql`), which is the only writer
+for `reviews`, `career_directions` and `review_events`.** Confirming is five writes that must not
+come apart, and supabase-js speaks REST — the same reasoning as 0005, 0006 and 0008.
+
+Five decisions there are load-bearing:
+
+- **`render_student` is enqueued in `save_review` and nowhere else**, and only on the transition
+  *into* `confirmed`. 0008's `record_score` deliberately does not queue it. The guard reads the
+  status the row held *before* the upsert, because afterwards every path looks confirmed — so a
+  double-tapped Confirm cannot produce two reports and two emails.
+- **The role and tenancy checks live inside the SQL function**, not only in the server action.
+  The caller holds the service role and bypasses RLS, so this is the only enforcement in the
+  database for this operation. A `counsellor` is refused: they have no read policy on `reviews`
+  (§16), and a counsellor who could *write* `interview_notes` would walk around it.
+- **Career directions are delete-then-insert, and rank comes from array position.** With
+  `unique (review_id, rank)`, a review going from three directions to two would otherwise keep a
+  stale rank 3 the psychologist deliberately removed. Trusting a client-supplied `rank` invites a
+  duplicate that trips the constraint mid-transaction.
+- **`confirmed_at` survives an edit but a send-back clears it.** Editing notes after sign-off is
+  not a second sign-off; withdrawing sign-off is, and R9 then blocks the report again.
+- **Reads go through the RLS-bound client**, unlike the taker's. This is the one screen holding
+  `interview_notes`, so reading it through the policies `test_rls_reviews.py` asserts is what
+  keeps the counsellor boundary honest — a regression shows up as an empty screen, not a leak.
+
+`web/lib/review.ts` is pure (flag meanings, chart arithmetic, queue formatting) and tested in
+`review.test.ts`. One test there pins **every flag code `flags.py` can emit to a plain-language
+meaning** — §9.1 requires it, and the failure mode is silent: a new flag with no entry renders
+beside a blank explanation, which reads as "nothing to worry about".
+
+Two rules constrain what this screen may say. **R3:** nothing pre-fills a note or drafts a
+rationale — the psychologist's clinical voice is theirs. **R4:** no percentiles, so raw scores and
+provisional bands only, with band names taken from the engine rather than re-derived here.
 
 ## The roster CSV and `intended_field`
 

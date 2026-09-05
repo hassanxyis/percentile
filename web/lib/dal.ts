@@ -108,3 +108,23 @@ export const requireRole = cache(
 export function canReviewSessions(role: Role): boolean {
   return role === "psychologist" || role === "org_admin" || role === "superadmin";
 }
+
+/** The roles `reviews_psychologist_read` admits. Counsellor is not one (§16). */
+export const REVIEWER_ROLES: Role[] = ["psychologist", "org_admin", "superadmin"];
+
+/**
+ * The caller, when they may work the review queue — or a redirect.
+ *
+ * A named helper rather than `requireRole(...REVIEWER_ROLES)` at each call site,
+ * because this particular list is a rule rather than a preference: it mirrors
+ * `reviews_psychologist_read` in 0003_reviews.sql, and the counsellor's absence
+ * from it is what keeps `interview_notes` out of their reach (§16). Spelling the
+ * roles out per page invites someone to add `counsellor` to just one of them.
+ *
+ * The database enforces it regardless — RLS on reads, and `save_review()`'s own
+ * role check on writes. This decides what renders and produces a clean redirect
+ * rather than an empty screen.
+ */
+export const requireReviewer = cache(async (): Promise<Session> => {
+  return requireRole(...REVIEWER_ROLES);
+});
