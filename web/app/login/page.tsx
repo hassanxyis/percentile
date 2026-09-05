@@ -12,6 +12,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const rawNext = params.next;
   const next = typeof rawNext === "string" && rawNext.startsWith("/") ? rawNext : "/dash";
   const noProfile = params.error === "no-profile";
+  // Both come from /auth/confirm. An invitation lasts one hour by default and is
+  // spent once used, so the overwhelmingly common cause is a link that sat in an
+  // inbox — not something the recipient can fix by trying again.
+  const badLink = params.error === "link-expired" || params.error === "bad-link";
 
   return (
     <main className="mx-auto flex w-full max-w-sm flex-col gap-6 px-6 py-24">
@@ -22,6 +26,16 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           not need an account.
         </p>
       </div>
+
+      {badLink && (
+        <p
+          role="alert"
+          className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+        >
+          That invitation link has expired or has already been used. Ask your
+          administrator to send a new one.
+        </p>
+      )}
 
       {noProfile && (
         <div

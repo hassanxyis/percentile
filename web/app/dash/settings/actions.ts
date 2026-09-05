@@ -48,21 +48,27 @@ export async function inviteMember(
 
   const admin = createAdminClient();
 
-  // After the invited user sets a password on Supabase's hosted page, GoTrue
-  // redirects the browser wherever `redirectTo` says. Sending it here (and to
-  // the app's /auth/callback) establishes the session in our cookies — without
-  // this it falls back to the project's SITE_URL and the invite lands on
-  // /login with no session, which reads as "the sign-in page instead of the
-  // app". NEXT_PUBLIC_APP_URL is set on Vercel (your deployed origin).
+  // Supabase mails the invitation, but there is **no hosted set-password page**
+  // at the other end of it. Accepting the link proves the address and creates a
+  // session; the account still has no password, and `login/actions.ts` only ever
+  // calls signInWithPassword. So the invitee must land on our own
+  // `/auth/set-password` or they can never sign in a second time.
+  //
+  // `redirectTo` is where GoTrue sends the browser after verification, and it
+  // must also be listed under Authentication → URL Configuration → Redirect
+  // URLs. If it is not, Supabase silently falls back to Site URL — which is the
+  // "the invite dropped me on the sign-in page" symptom.
+  //
+  // Getting to `/auth/confirm` at all needs `{{ .TokenHash }}`, which comes from
+  // the invite email template rather than from here; app/auth/confirm/route.ts
+  // carries the template to paste and the reason it is required.
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(
     /\/$/,
     "",
   );
 
-  // Supabase sends the set-password link. We never see or set the password —
-  // this app has no code path that handles one other than at sign-in.
   const { data, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${appUrl}/auth/callback?next=/dash`,
+    redirectTo: `${appUrl}/auth/set-password`,
   });
 
   if (inviteError || !data.user) {
