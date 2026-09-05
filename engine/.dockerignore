@@ -1,0 +1,29 @@
+# .dockerignore — applied when this directory is the Docker build context
+# (Render "Root Directory: engine"; a local `docker build engine`).
+
+# Secrets. engine/.env holds the real SUPABASE_SERVICE_ROLE_KEY and the shared
+# secret. NEVER ship it into the image — .dockerignore is the only line of
+# defence if a future `COPY . .` replaces the explicit COPYs in the Dockerfile.
+.env
+.env.*
+!.env.example
+
+# Local caches, virtualenvs and build outputs — inflate the build context,
+# and a stale .venv could be copied into the image by a future `COPY . .`.
+.git
+.venv
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+dist
+build
+*.pyc
+
+# Unit tests and their fixtures are not needed in the runtime image; pytest and
+# psycopg are [dev] extras that the Dockerfile deliberately does not install.
+tests

@@ -1,0 +1,27 @@
+# Render Blueprint — pins the engine to the Docker runtime so the service
+# cannot silently fall back to the Python buildpack (`requirements.txt`,
+# Python 3.14 default) and miss both the WeasyPrint system libraries and the
+# pyproject.toml install. The Dockerfile in engine/ is the single source of
+# truth for the runtime; this file only declares the plumbing.
+#
+# Create the service from the Render dashboard: "New +" → Blueprint → this
+# repo. Secrets (sync: false) are prompted for at creation, never stored here.
+# For the first run, do NOT set RESEND_API_KEY — the engine logs mails and
+# drains the queue harmlessly, which is deliberate (CLAUDE.md · email).
+services:
+  - type: web
+    name: percentile-engine
+    runtime: docker
+    rootDir: engine
+    dockerfilePath: Dockerfile
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ENGINE_SHARED_SECRET
+        sync: false
+      - key: APP_BASE_URL
+        sync: false

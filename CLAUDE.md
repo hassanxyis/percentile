@@ -438,8 +438,11 @@ policies. Auth checks do not belong in a layout either: Next's own guidance is t
 
 ## WeasyPrint
 
-WeasyPrint links against system libraries at import time. Both CI and the Dockerfile install
-`libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfribidi0 libcairo2 libgdk-pixbuf-2.0-0`.
-Missing them is the number-one cause of "works locally, blank PDF in production". Report
-fonts are bundled into the image — never fetched from Google Fonts at render time, or the PDF
-silently falls back and looks wrong only in production.
+WeasyPrint links against system libraries at import time. Both CI (`ci.yml`) and the engine's
+container image (`engine/Dockerfile`) install `libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b
+libfribidi0 libcairo2 libgdk-pixbuf-2.0-0 fonts-dejavu-core` — the two hands on the same knob,
+so "works in CI" and "works in the container" cannot drift apart. Missing them is the
+number-one cause of "works locally, blank PDF in production". Report fonts ship inside the
+image (bundled from M9; until then `fonts-dejavu-core` is the fallback family) — never fetched
+from Google Fonts at render time, or the PDF silently falls back and looks wrong only in
+production.
