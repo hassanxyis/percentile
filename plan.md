@@ -400,6 +400,30 @@ Everything from v1 §6.1 (Interest Profiler) and §6.2 (IPIP-50) is unchanged. T
 (Work Importance Locator, now retired — see §19) with GET2, and keeps the O*NET occupation files
 (§6.4 below, was §6.4) as-is.
 
+### 6.0 Published reliability figures — carried forward from v1
+
+Recorded here because M13's done-when requires comparing local alphas "in writing against the
+published Interest Profiler and IPIP alphas", and these are also the numbers that answer a
+principal asking why this is not a free internet quiz:
+
+| Instrument | Published figures |
+|---|---|
+| O*NET Interest Profiler SF | internal consistency .78–.87; test–retest .78–.86 |
+| IPIP-NEO (120-item) | domain alphas .86–.90 |
+| GET2 | not recorded in v1 — pin from Caird's guide alongside §20 item 2 |
+
+A local alpha that comes back well below these is a finding about the sample, not automatically a
+bug: v1's note is that a badly-performing scale on Pakistani data is real information, and a paper.
+
+**English only in v1, and this is not a scope cut to reverse casually.** Translating a validated
+instrument changes its psychometric properties — it needs back-translation and a fresh reliability
+study, not a translation pass. Target schools are English-medium. Say on the site that an Urdu
+edition is in development; shipping an unrevalidated translated instrument is named in v1 as the
+single mistake that would cost the credibility this product rests on.
+
+**The 120-item IPIP-NEO is the paid "deep profile" upgrade, deliberately withheld from school-age
+takers.** It is not an omission from the 50-item set.
+
 ### 6.3 `data/instruments/get2_items.csv` and `get2_scoring.json` — NEW
 
 Source: Caird, S., *General Measure of Enterprising Tendency v2 (GET2)*, published through The
@@ -609,6 +633,19 @@ Every route still requires `X-Engine-Key`; the engine is never called from a bro
 Unchanged from v1: `for update skip locked` claiming, five-minute cron via GitHub Actions, retry
 with backoff up to 5 attempts then `failed` + alert. New job kinds: `notify_psychologist` (fires
 once when a session enters `pending_review`) and `review_reminder` (the 5-day nudge from §9.4).
+
+**Correction, made in M7 after v1 was recovered: v1 does not specify any of that.** Its only
+job-runner content is the free-tier note — treat the Python service as disposable compute, keep
+persistent state in Supabase, and ping the database daily so the project does not pause. There is
+no claiming strategy, no retry policy and no attempt counting anywhere in v1. The paragraph above
+describes something that was never written down, so M7 decided it. Do not go looking for a prior
+spec to reconcile against; the reasoning lives in `0008_job_runner.sql`'s header and in
+CLAUDE.md's "The job runner" section.
+
+The one thing v1 *does* determine here is the most important decision: because the engine host is
+explicitly disposable and will be killed mid-job, `attempts` increments when a job is **claimed**
+rather than when it fails — otherwise the likeliest production failure is the one the retry cap
+never covers.
 
 **Constraint on the `invite` email, settled in M5.** The `send_email` job that M5 enqueues carries
 `{template: 'invite', participant_id}` and deliberately **not** the token: `jobs` rows are retried,
@@ -903,7 +940,15 @@ in the queue.
 `norms/recompute` with alpha coefficients, the public RIASEC-only free test, pricing page,
 invoice-based institution signup.
 **Done when:** norms exist for your first population with `n` recorded and compared in writing
-against the published Interest Profiler and IPIP alphas.
+against the published Interest Profiler and IPIP alphas (§6.0 carries those figures).
+
+**Apply to Paddle during the pilot, not here.** v1 flags the approval as slow and says explicitly
+to keep it off the critical path. Nothing before M13 needs it — institutions pay by invoice, and
+card checkout only matters when selling to a stranger — but discovering a multi-week approval
+queue in week 14 stalls the milestone for a reason that had nothing to do with the code.
+
+**The free public test is the global funnel**, not a marketing afterthought; v1 says build it
+properly while the momentum is there rather than bolting it on later.
 
 **If GET2 permission (R10) hasn't cleared by M6, ship M6–M13 with the module disabled via the
 `module_not_administered` path (§6.3, §7.3) rather than blocking the whole build on an email

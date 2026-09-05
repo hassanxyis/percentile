@@ -42,6 +42,13 @@ Locator / card-sort values module anywhere (code, old commits, your own assumpti
 was v1. It is retired; module 3 is now **GET2** (`engine/app/scoring/get2.py`), entrepreneurial
 tendency. See `plan.md` §19 for the full diff and why.
 
+**`plan_1.md` is not v1, despite its title.** It is a stale copy of v2 from before M5–M7 were
+marked done — the diff against `plan.md` is five lines, all milestone headers. The real v1 is a
+chat artefact, not a file in this repo. Everything from it that still matters has been folded in:
+the reliability figures and the English-only rationale into §6.0, the Paddle lead time into M13,
+and the correction that **v1 never specified the job runner** into §12. `plan.md` remains
+authoritative; do not treat `plan_1.md` as a second source.
+
 `plan.md` §0 lists ten non-negotiable rules. Six of them change what you are allowed to
 write, and are repeated here because violating them silently produces working code that
 destroys the product's credibility:
