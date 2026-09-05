@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Where the build is
 
-**M0–M7 are done in code. M8 (the psychologist review portal) is next. Nothing is deployed.**
-`plan.md` §17 carries the detail; the short version:
+**M0–M7 are written, tested and LIVE. The engine is on Render; the web app is on Vercel.
+M8 (the psychologist review portal) is next — `web/app/review` does not exist, so `/review`
+404s.** `plan.md` §17 carries the detail; the short version:
 
 A counsellor can sign in, create a cohort and upload a roster CSV. A student can open their invite
 link, consent, answer both modules on a phone, close the tab mid-way, come back and resume where
@@ -15,20 +16,49 @@ moves the participant to `pending_review` and emails the psychologist. Auth, RLS
 roster import, the taker-flow functions and the job functions are all covered by tests that run
 against a real Postgres in CI.
 
-**The queue has a consumer now, but nothing is running it.** The engine is not deployed anywhere,
-so `ENGINE_BASE_URL` is unset and `.github/workflows/tick.yml` skips every five minutes. Deploying
-the engine and setting that secret switches the whole pipeline on with no code change.
+**The pipeline is live end-to-end.** The engine is a Docker service on Render at
+`https://percentile-hwlu.onrender.com`, built from `engine/Dockerfile` via `render.yaml`
+(`runtime: docker`, `rootDir: engine`). The web app is on Vercel at
+`https://percentile-lyart.vercel.app` (root dir `web`, Next.js 16, pnpm). GitHub Actions
+secrets `ENGINE_BASE_URL` and `ENGINE_SHARED_SECRET` are set, so `tick.yml` no longer skips.
+A manual tick has been verified against the live engine: `/health` → `{"status":"ok"}`.
 
-**Two irreversible things happen on the first real tick.** The `send_email` handler mints a fresh
-token at send time — only `sha256(token)` is ever stored, so it cannot reconstruct the link M5
-handed out (`0005_import_roster.sql`, `plan.md` §12) — which means **every invite link already
-distributed stops working at that moment**. And with `RESEND_API_KEY` set, mail goes to the real
-addresses on the roster. Leave the key unset for a first run: `LoggingEmailer` logs `NOT SENT` at
-WARNING and drains the queue harmlessly.
+**Live data state (Supabase project `rvfiqaurtardlirgfera`):**
+- `items`: 110 loaded. `occupations`: 923, incl. 10 Pakistan-localised rows (3 on the
+  entrepreneurship track), loaded with the fixed `scripts/load_onet.py`.
+- 20 participants: 19 `invited`, 1 `pending_review` — **Fatima Khan**, who has 1 score and 5
+  occupation matches. She is the seed case for M8.
+- `jobs` table: **empty; every job done.** The first real tick ran 20 `send_email` jobs
+  through `LoggingEmailer` (`NOT SENT`, no key), so every imported student's
+  `invite_token_hash` has been re-minted and all original links are dead — reissuing by email
+  (once `RESEND_API_KEY` is set and `APP_BASE_URL` points at the real web app) is the only
+  path. 21 junk invite jobs (20 for participants deleted during a re-import experiment, 1
+  refused for Fatima because she already submitted) were **deleted by hand** — do not expect
+  them to return.
 
-The live Supabase project holds one organisation, one `org_admin`, one cohort, and M5's 20
-participants with their queued jobs. Those 20 students' raw tokens existed only in the one-time CSV
-download, so their current links are not recoverable — but a tick will reissue them by email.
+**Load-bearing quirks a new agent must know:**
+- `scripts/load_onet.py` used to fail silently against Supabase: it wrote two partial upserts,
+  and PostgREST assigns NULL to every omitted NOT NULL column on conflict. Fixed to one
+  complete-row upsert (commit `6155e36`); re-running it is idempotent.
+- **Render env `APP_BASE_URL` is still `http://localhost:3000`.** Change it to
+  `https://percentile-lyart.vercel.app` *before* setting `RESEND_API_KEY` — invite and review
+  links are built from it, and a link to localhost reaches nobody.
+- `RESEND_API_KEY` is deliberately unset (`LoggingEmailer` drains with `NOT SENT`). Real email
+  should wait until M9's `render_student` exists — confirming a session in M8 enqueues
+  `render_student`, and no handler for it is implemented yet.
+
+**Start here: M8 — the psychologist review portal.** No `web/app/review` directory exists.
+Build `/review` (queue, org-scoped, `role = 'psychologist'`/`org_admin` only, oldest first)
+and `/review/[session_id]` (detail) per `plan.md` §9: student name/cohort/intended field/time
+since submission; all engine output — interest hexagon, personality bars, GET2 subscales or
+`not administered`, the top-15 occupation matches (Fatima's are present), and every quality
+flag with its plain-language meaning; a free-text `interview_notes` field (R3 — never
+model-generated); a 1–3 `career_directions` picker with a rationale field each; and
+Save-draft (`in_progress`) / Confirm (`confirmed`, enqueues `render_student`) / Send-back
+(`needs_more_info`) actions, with a `review_events` audit trail. **Done-when:** confirming a
+session makes a `reports` insert succeed where it failed before (the R9 trigger). The db tests
+asserting that trigger already pass in CI; the pages and their server actions are what is
+missing.
 
 ## Read plan.md first
 

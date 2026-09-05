@@ -765,7 +765,12 @@ Roughly twenty hours a week. Twelve milestones, now **~15 weeks / ~300 hours** �
 step or GET2 under schedule pressure. Do not start a milestone before the previous one's test
 passes.
 
-> **Progress: M0–M7 complete in code. M8 is next. Nothing is deployed.**
+> **Progress: M0–M7 written, tested and LIVE. M8 (review portal) is next.** Engine runs as a
+> Docker service on Render (`https://percentile-hwlu.onrender.com`); the web app is on Vercel
+> (`https://percentile-lyart.vercel.app`). `ENGINE_BASE_URL` / `ENGINE_SHARED_SECRET` are set on
+> GitHub, so `tick.yml` and `keepalive.yml` run. Occupations (923 + 10 localised) and items
+> (110) are loaded; the jobs queue is empty; 19 participants are `invited` and 1
+> (`pending_review`, Fatima Khan, scored + matched) is the seed for M8.
 >
 > M0–M3 built the repo, the instrument loader, the pure scoring modules and O*NET matching.
 > M4 added auth, RLS and the R9 trigger, with 18 database tests proving them against a real
@@ -775,15 +780,14 @@ passes.
 > autosave, resume, and a submission that queues a `score_session` job. M7 built the runner that
 > drains all of it.
 >
-> **The queue now has a consumer, but nothing is running it.** `POST /tick` exists and is tested;
-> the engine is not deployed anywhere, so `ENGINE_BASE_URL` is unset and `tick.yml` skips every
-> five minutes. The 20 `send_email` and any `score_session` jobs still sit pending. Deploying the
-> engine and setting that secret is what switches the whole thing on — no code change needed.
->
-> **Two things to know before that first tick runs.** It will mint fresh invite tokens and email
-> them, so every link from M5's one-time download dies at that moment (§12) — correct precedence,
-> but not reversible. And with `RESEND_API_KEY` set, mail goes to real students' real addresses;
-> unset, it logs `NOT SENT` and drains harmlessly, which is the safer way to try it first.
+> **Operational notes for whoever deploys/changes anything:** Render's `APP_BASE_URL` is still
+> `http://localhost:3000` — set it to the Vercel URL before any real email. `RESEND_API_KEY` is
+> unset on purpose (`LoggingEmailer` drains with `NOT SENT`); real mail waits until M9's
+> `render_student` handler exists, because confirming a session enqueues one. `load_onet.py`
+> writes one complete-row upsert now — the earlier two-partial-upsert shape could not run
+> against Supabase/PostgREST (commit `6155e36`). A phantom tick once reported work this
+> project's queue never did; check there is only one Render service before debugging a
+> queue that "drains itself".
 
 ### M0 — Repo and skeleton *(week 1, ~4 h)*
 Unchanged from v1. **Done when:** `pytest` and `next build` pass in CI on an empty project.
