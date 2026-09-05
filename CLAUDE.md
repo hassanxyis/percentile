@@ -4,28 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Where the build is
 
-**M0–M6 are done. M7 (the job runner) is next.** `plan.md` §17 carries the detail; the short
-version:
+**M0–M7 are done in code. M8 (the psychologist review portal) is next. Nothing is deployed.**
+`plan.md` §17 carries the detail; the short version:
 
 A counsellor can sign in, create a cohort and upload a roster CSV. A student can open their invite
 link, consent, answer both modules on a phone, close the tab mid-way, come back and resume where
-they left off, and submit — which queues a `score_session` job. Auth, RLS, the R9 trigger, roster
-import and the three taker-flow SQL functions are all covered by tests that run against a real
-Postgres in CI.
+they left off, and submit — which queues a `score_session` job. M7 built the runner that drains
+that queue: `POST /tick` claims jobs with `for update skip locked`, scores, matches occupations,
+moves the participant to `pending_review` and emails the psychologist. Auth, RLS, the R9 trigger,
+roster import, the taker-flow functions and the job functions are all covered by tests that run
+against a real Postgres in CI.
 
-**Nothing drains the queue, and nothing sends email.** `engine/app/email.py` does not exist and
-`resend_api_key` sits unused in `engine/app/config.py`. Both the `send_email` jobs from M5 and the
-`score_session` jobs from M6 sit unclaimed until M7 builds the runner. That is the next milestone
-and it now has two job kinds waiting for it, not one.
+**The queue has a consumer now, but nothing is running it.** The engine is not deployed anywhere,
+so `ENGINE_BASE_URL` is unset and `.github/workflows/tick.yml` skips every five minutes. Deploying
+the engine and setting that secret switches the whole pipeline on with no code change.
 
-M7's `send_email` handler **must mint a fresh token at send time** — only `sha256(token)` is ever
-stored, so it cannot reconstruct the link M5 handed out. `0005_import_roster.sql`'s closing comment
-and `plan.md` §12 both spell this out.
+**Two irreversible things happen on the first real tick.** The `send_email` handler mints a fresh
+token at send time — only `sha256(token)` is ever stored, so it cannot reconstruct the link M5
+handed out (`0005_import_roster.sql`, `plan.md` §12) — which means **every invite link already
+distributed stops working at that moment**. And with `RESEND_API_KEY` set, mail goes to the real
+addresses on the roster. Leave the key unset for a first run: `LoggingEmailer` logs `NOT SENT` at
+WARNING and drains the queue harmlessly.
 
 The live Supabase project holds one organisation, one `org_admin`, one cohort, and M5's 20
-participants with their queued jobs. Note that those 20 students' raw tokens existed only in the
-one-time CSV download from the import screen, so their links are not recoverable — upload a fresh
-roster when you need a working link to test with.
+participants with their queued jobs. Those 20 students' raw tokens existed only in the one-time CSV
+download, so their current links are not recoverable — but a tick will reissue them by email.
 
 ## Read plan.md first
 
@@ -287,6 +290,45 @@ scoring a module nobody answered. Drain in-flight sessions before loading a new 
 wording needs a counsellor or someone at GIFT to review it, not to be drafted solo. It discloses
 the psychologist review step (§13, §16) and avoids clinical framing (R7), but it should not go in
 front of a real cohort unreviewed.
+
+## The job runner (`engine/app/jobs/`)
+
+`POST /tick` is the only thing that drives the engine. `runner.run_tick` reaps stale jobs, sweeps
+the review backlog, then claims and dispatches until the batch is empty or the deadline is near.
+The SQL is `0008_job_runner.sql`; the handlers are one file per kind.
+
+Five decisions here look odd and are load-bearing:
+
+- **`attempts` increments when a job is CLAIMED, not when it fails.** The engine host is disposable
+  and will be killed mid-job; if only handled failures counted, a job that crashes the process
+  retries forever and the cap never fires. The cost is that a job whose worker died stays `running`
+  and is invisible to `claim_jobs` — which is why `requeue_stale_jobs()` is mandatory, not an
+  optimisation. Removing it means one crashed process silently loses one student's scoring.
+- **Scoring is still pure.** `plan.md` §7.5 sketches `score_session(session_id)` with the database
+  inside; that would break `app/scoring/*`'s no-DB rule. The steps are split:
+  `repository.py` loads, `scoring/engine.py` computes, `record_score()` writes. That split is what
+  makes `rescore_all.py` (M12) possible, per R1.
+- **`record_score` sets `pending_review`, never `scored`, and never enqueues `render_student`.**
+  Nothing could observe `scored` (both writes are one transaction), and a participant stuck there
+  after a `match_occupations` failure would vanish from the review queue with no error. The render
+  job is R9's business and only M8's confirm action may queue it.
+- **The follow-up jobs are guarded on `v_awaiting`.** `record_score` is idempotent and re-runs
+  whenever a worker dies mid-job, and `rescore_all.py` will re-run it deliberately. Without the
+  guard a rescore of an already-`confirmed` session would enqueue a *first* `notify_psychologist`
+  and email a student about results they received weeks ago. `match_occupations` is deliberately
+  *not* gated — matches are keyed by engine version, so a rescore must rematch.
+- **`fail_job` will not alert about a failed alert.** The alert is itself a `send_email`; a mail
+  outage would otherwise enqueue one new failing row per tick, forever.
+
+`jobs.last_error` is truncated to 2000 chars in SQL and the runner records `TypeName: message`
+rather than a traceback. That column is retried, logged and emailed, and a traceback can carry
+locals — one of which is a live invite token inside the email handler.
+
+**An unset `RESEND_API_KEY` is a supported mode.** `build_emailer` returns `LoggingEmailer`, which
+logs `NOT SENT` at WARNING and reports success. Raising would make a local tick fail every job five
+times; a silent no-op would let someone drain twenty invites and believe they were sent. There is
+deliberately no second `EMAIL_ENABLED` flag — two switches means a deployment can hold a real key
+and still send nothing.
 
 ## The roster CSV and `intended_field`
 

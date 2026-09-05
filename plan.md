@@ -728,21 +728,25 @@ Roughly twenty hours a week. Twelve milestones, now **~15 weeks / ~300 hours** �
 step or GET2 under schedule pressure. Do not start a milestone before the previous one's test
 passes.
 
-> **Progress: M0–M6 complete. M7 is next.**
+> **Progress: M0–M7 complete in code. M8 is next. Nothing is deployed.**
 >
 > M0–M3 built the repo, the instrument loader, the pure scoring modules and O*NET matching.
 > M4 added auth, RLS and the R9 trigger, with 18 database tests proving them against a real
 > Postgres in CI. M5 added roster import: a counsellor signs in, creates a cohort, uploads a CSV,
 > and gets 20 `invited` participants plus one queued `send_email` job each. M6 built the taker at
 > `/a/[token]`, so those invite links now resolve: consent, both modules one item per screen,
-> autosave, resume, and a submission that queues a `score_session` job.
+> autosave, resume, and a submission that queues a `score_session` job. M7 built the runner that
+> drains all of it.
 >
-> **Nothing drains the queue.** `engine/app/email.py` still does not exist and the job runner is
-> M7, so both job kinds now sit unclaimed. That ordering was deliberate and has paid off — the
-> taker flow existed before any invite was sent, so no student got a link to a 404.
+> **The queue now has a consumer, but nothing is running it.** `POST /tick` exists and is tested;
+> the engine is not deployed anywhere, so `ENGINE_BASE_URL` is unset and `tick.yml` skips every
+> five minutes. The 20 `send_email` and any `score_session` jobs still sit pending. Deploying the
+> engine and setting that secret is what switches the whole thing on — no code change needed.
 >
-> M7's `send_email` handler must mint a fresh token at send time; only `sha256(token)` was ever
-> stored, so it cannot reconstruct the link the import screen handed out (§12).
+> **Two things to know before that first tick runs.** It will mint fresh invite tokens and email
+> them, so every link from M5's one-time download dies at that moment (§12) — correct precedence,
+> but not reversible. And with `RESEND_API_KEY` set, mail goes to real students' real addresses;
+> unset, it logs `NOT SENT` and drains harmlessly, which is the safer way to try it first.
 
 ### M0 — Repo and skeleton *(week 1, ~4 h)*
 Unchanged from v1. **Done when:** `pytest` and `next build` pass in CI on an empty project.
@@ -824,8 +828,45 @@ in-flight sessions before loading GET2.
 (§13) and avoids clinical framing (R7), but §20 item 8 asks for a counsellor or someone at GIFT to
 review the wording before it reaches a real cohort.
 
-### M7 — Job runner *(week 7, ~8 h)*
+### M7 — Job runner *(week 7, ~8 h)* — **DONE (pending deploy)**
 Unchanged from v1, plus `notify_psychologist` and `review_reminder` job kinds.
+
+`POST /tick` claims with `for update skip locked` and dispatches to
+`engine/app/jobs/handlers/`. Both kinds that had been sitting unclaimed since M5
+and M6 now have a handler, and 0008 adds `match_occupations`,
+`notify_psychologist`, `review_reminder` and `results_in_review` to the queue.
+
+**Done when:** a tick scores a submitted session, moves it to `pending_review`
+and notifies a psychologist — and a re-run of the same tick changes nothing.
+*Automated checks pass. The engine is not deployed anywhere, so the cron is
+still skipping; that is what actually closes this milestone.*
+
+Five things here were decided rather than inherited:
+
+- **`attempts` increments at CLAIM time, not on failure.** The engine host is
+  disposable and will be killed mid-job; counting only handled failures means
+  the one failure mode most likely in production is the one the retry cap never
+  covers. The cost is that a job whose worker died stays `running` forever, so
+  `requeue_stale_jobs()` is mandatory rather than an optimisation.
+- **Scoring stays pure.** §7.5 sketches `score_session(session_id)` with the
+  writes inside; that would break the rule that `app/scoring/*` touches no
+  database. `scoring/engine.py` is pure, `repository.py` loads, `record_score()`
+  writes. This is what keeps `rescore_all.py` (M12) possible.
+- **Status goes straight to `pending_review`, skipping `scored`.** Nothing could
+  observe `scored` — both writes are one transaction — and a participant left
+  there when `match_occupations` failed would be missing from the review queue
+  with no error anywhere.
+- **An unset `RESEND_API_KEY` logs instead of raising.** A local tick has to be
+  able to drain the queue, but the log line says `NOT SENT` at WARNING so nobody
+  skims a green run and believes twenty students were emailed.
+- **`fail_job` refuses to alert about a failed alert.** The alert is itself a
+  `send_email`; without the guard a mail outage enqueues one new failing row per
+  tick, forever.
+
+One consequence to know before deploying: the invite handler mints a fresh token
+at send time (§12), so **every link from M5's one-time download stops working
+the moment the first tick runs**. That is the intended precedence, but it means
+the 20 live participants get new links and any link already handed out is dead.
 
 ### M8 — Psychologist review portal *(weeks 7–8, ~20 h) — NEW MILESTONE*
 `/review` queue, `/review/[session_id]` detail screen, save-draft/confirm/send-back actions,

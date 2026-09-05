@@ -61,6 +61,17 @@ def test_version_with_key(client: TestClient) -> None:
     assert response.json()["engine_version"]
 
 
+def test_tick_requires_key(client: TestClient) -> None:
+    """`/tick` claims and runs jobs. An open one lets anyone drain the queue —
+    including the invite mails, which would mint new tokens and invalidate every
+    link already handed out."""
+    assert client.post("/tick").status_code == 401
+
+
+def test_tick_rejects_wrong_key(client: TestClient) -> None:
+    assert client.post("/tick", headers={"X-Engine-Key": "wrong"}).status_code == 401
+
+
 def test_unset_secret_rejects_everything() -> None:
     """An engine deployed without its secret must fail closed, not open."""
     app.dependency_overrides[get_settings] = lambda: Settings(engine_shared_secret="")

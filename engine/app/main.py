@@ -83,3 +83,27 @@ def version() -> dict:
         "engine_version": SCORING_ENGINE_VERSION,
         "template_version": TEMPLATE_VERSION,
     }
+
+
+@app.post("/tick", dependencies=[Depends(require_engine_key)])
+def tick(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+    """Claim and run pending jobs (plan §11, §12).
+
+    The only thing that drives the engine. `.github/workflows/tick.yml` calls
+    this every five minutes; nothing calls it from a user request, and a student
+    submitting waits for the next tick rather than for a scoring run (plan §2).
+
+    Returns counts, never payloads: a job payload carries a `participant_id`,
+    and for a moment inside the invite handler a live token. This response is
+    logged by curl, by Actions, and by whatever proxy sits in front.
+
+    Runs synchronously rather than in a background task. The HTTP response is
+    the only signal Actions gets — returning 202 immediately would make the
+    workflow green whatever happened, which is the same fail-green shape that
+    made `keepalive.yml` useless for six milestones.
+    """
+    from app.db import get_client
+    from app.jobs.runner import run_tick
+
+    result = run_tick(get_client(), settings)
+    return result.as_dict()
