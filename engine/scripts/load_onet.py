@@ -264,15 +264,32 @@ def load(client, dry_run: bool) -> tuple[int, int]:
     if dry_run:
         return len(occupations), len(pk_rows)
 
-    client.table("occupations").upsert(occupations, on_conflict="onet_soc_code").execute()
-    print(f"occupations: loaded {len(occupations)}")
+    # One upsert of COMPLETE rows, not two partial upserts. PostgREST will not
+    # settle a partial payload against an existing key: `ON CONFLICT DO
+    # UPDATE` assigns every omitted NOT NULL column to NULL ("null value in
+    # column "title" violates not-null constraint"), even when the key already
+    # exists. The two-upsert design (base rows, then pk-map rows) therefore
+    # cannot run against Supabase at all — a re-load fails no matter what. So:
+    # every row carries the columns `occupations` declares NOT NULL, and the
+    # localisation layer is merged in before one upsert. A map fix now rewrites
+    # the whole catalogue, which the old design avoided — but a loader that
+    # runs is worth more than a cheaper one that errors.
+    pk_by_code = {row["onet_soc_code"]: row for row in pk_rows}
+    rows = []
+    for occupation in occupations:
+        row = {
+            **occupation,
+            "pk_relevant": False,
+            "entrepreneurial_track": False,
+            "pk_title": None,
+            "pk_pathway": None,
+        }
+        row.update(pk_by_code.get(occupation["onet_soc_code"], {}))
+        rows.append(row)
 
-    # Applied as a second upsert rather than merged into the rows above: the
-    # localisation layer is edited far more often than O*NET is re-released, and
-    # keeping it separate means a map fix does not rewrite 923 catalogue rows.
+    client.table("occupations").upsert(rows, on_conflict="onet_soc_code").execute()
     if pk_rows:
-        client.table("occupations").upsert(pk_rows, on_conflict="onet_soc_code").execute()
-        print(f"pk map: applied {len(pk_rows)} rows")
+        print(f"occupations: loaded {len(rows)} ({len(pk_rows)} localised rows)")
 
     return len(occupations), len(pk_rows)
 
