@@ -4,11 +4,13 @@ name: keepalive
 # runner lands (M7) nothing else connects to it. GET /health reads one row, so a
 # daily call is enough to keep the project awake (plan §2, §11).
 #
-# tick.yml runs every five minutes but POSTs /tick, which does not exist yet —
-# this is the workflow that actually holds the database open in the meantime.
+# Two ways to do it, in preference order — see the steps below. Until an engine
+# is deployed (M7) neither ENGINE_BASE_URL nor a direct database URL is
+# necessarily set, and in that state nothing keeps the project awake. The last
+# step says so out loud rather than letting the gap pass silently.
 #
 # /health is the one route that does not require X-Engine-Key (plan §11), so no
-# secret beyond the base URL is needed here.
+# secret beyond the base URL is needed for the engine path.
 on:
   schedule:
     - cron: "17 4 * * *"
@@ -17,13 +19,45 @@ on:
 jobs:
   keepalive:
     runs-on: ubuntu-latest
+    # Job-level env, not step-level: the `secrets` context is unavailable in a
+    # step `if`, where it would silently evaluate empty and skip forever. See
+    # the same note in tick.yml.
+    env:
+      ENGINE_BASE_URL: ${{ secrets.ENGINE_BASE_URL }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
     steps:
+      # Preferred once the engine is deployed: one call that proves the whole
+      # path (host up, database reachable) rather than only the database.
       - name: Touch the database through the engine
+        if: ${{ env.ENGINE_BASE_URL != '' }}
         # --retry-connrefused because the first request may be waking a sleeping
         # free-tier host. --fail-with-body so a 503 ("degraded") fails the run
         # and shows why, rather than passing silently.
         run: |
           curl -sS -m 120 "$ENGINE_BASE_URL/health" \
             --retry 3 --retry-connrefused --fail-with-body
-        env:
-          ENGINE_BASE_URL: ${{ secrets.ENGINE_BASE_URL }}
+
+      # Fallback until then — and the reason this file needed a second step at
+      # all. There is no engine deployed, so the step above has never once run:
+      # ENGINE_BASE_URL is unset, curl gets "/health" with no host, and the run
+      # fails. The comment at the top of this file claimed this workflow was
+      # holding the database open. It was not. Nothing was, beyond someone
+      # happening to use the app inside the 7-day window.
+      #
+      # A Supabase project that pauses takes the pilot down with it, so this
+      # reaches Postgres directly instead of waiting for M7.
+      - name: Touch the database directly
+        if: ${{ env.ENGINE_BASE_URL == '' && env.SUPABASE_DB_URL != '' }}
+        run: |
+          psql "$SUPABASE_DB_URL" -c "select 1" >/dev/null
+
+      - name: Warn when neither secret is set
+        if: ${{ env.ENGINE_BASE_URL == '' && env.SUPABASE_DB_URL == '' }}
+        # Deliberately not a failure. A red run every day for a known,
+        # documented gap is noise that trains you to ignore the Actions tab.
+        # A warning on a green run says the same thing without that cost.
+        run: |
+          echo "::warning::Nothing is keeping the Supabase project awake."
+          echo "Set SUPABASE_DB_URL (session pooler connection string) to fix"
+          echo "this now, or ENGINE_BASE_URL once M7 deploys the engine."
+          echo "Without one of them the free project pauses after 7 idle days."

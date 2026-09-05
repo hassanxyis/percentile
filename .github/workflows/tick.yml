@@ -11,14 +11,34 @@ on:
 jobs:
   tick:
     runs-on: ubuntu-latest
+    # Promoted to job-level env because the `secrets` context is NOT available
+    # in a step-level `if` (GitHub's context availability table lists github,
+    # needs, strategy, matrix, job, runner, env, vars, steps, inputs — no
+    # secrets). Writing `if: secrets.X != ''` parses fine and silently
+    # evaluates empty, so the step would never run even once the secret is set.
+    # That fails green, which is worse than the failure it replaces.
+    env:
+      ENGINE_BASE_URL: ${{ secrets.ENGINE_BASE_URL }}
+      ENGINE_SHARED_SECRET: ${{ secrets.ENGINE_SHARED_SECRET }}
     steps:
       - name: Wake engine and run jobs
+        # Skipped until ENGINE_BASE_URL is set as a repository secret.
+        #
+        # There is nothing to wake yet: POST /tick does not exist (app/main.py
+        # serves /health and /version only) and the job runner is M7. Without
+        # this guard the unset secret expands to an empty string and curl fails
+        # with "no host part in the URL" every five minutes — which trains you
+        # to ignore a permanently red Actions tab, and that is how a real
+        # failure gets missed.
+        #
+        # Setting the secret after M7 deploys the engine switches this on. No
+        # edit to this file is needed then, which is the point: a commented-out
+        # schedule would be a second thing to remember, and forgetting it means
+        # jobs silently never run.
+        if: ${{ env.ENGINE_BASE_URL != '' }}
         # --retry-connrefused matters: the first request wakes a sleeping host
         # and may fail while it boots.
         run: |
           curl -sS -m 120 -X POST "$ENGINE_BASE_URL/tick" \
             -H "X-Engine-Key: $ENGINE_SHARED_SECRET" \
             --retry 3 --retry-connrefused --fail-with-body
-        env:
-          ENGINE_BASE_URL: ${{ secrets.ENGINE_BASE_URL }}
-          ENGINE_SHARED_SECRET: ${{ secrets.ENGINE_SHARED_SECRET }}
