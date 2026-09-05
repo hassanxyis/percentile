@@ -247,6 +247,15 @@ Accounts are invite-only (`web/app/dash/settings/actions.ts`). There is no signu
 and `role` — and `role` is what gates `reviews.interview_notes`, the notes about a minor that §16
 says to treat like health data. An institution's first admin is seeded by hand.
 
+Staff invites ride **Supabase Auth**, not the engine's Resend path: `inviteMember` calls
+`inviteUserByEmail(email, { redirectTo: $NEXT_PUBLIC_APP_URL/auth/callback?next=/dash })`, the
+accept link opens Supabase's hosted set-password page, and GoTrue then redirects to the app's
+`web/app/auth/callback/route.ts`, which exchanges the one-time code for a session cookie and
+lands the new member in `/dash`. Supabase's **Site URL / Redirect URLs** must include the
+deployed origin for the fallback redirect to work. The "You've been invited … Accept
+invitation" mail is Supabase's built-in template (editable under Auth → Emails); the engine's
+`{organisation}: your careers questionnaire` invite is a separate system for students.
+
 `db/migrations/0002_rls.sql` enables RLS on all sixteen v1 tables; `0003_reviews.sql` adds
 three more (`reviews`, `review_events`, `career_directions`) plus a `psychologist` role.
 `0004_r9_trigger_update.sql` widens the R9 trigger to `before insert or update` — 0003 created it

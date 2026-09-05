@@ -48,9 +48,22 @@ export async function inviteMember(
 
   const admin = createAdminClient();
 
+  // After the invited user sets a password on Supabase's hosted page, GoTrue
+  // redirects the browser wherever `redirectTo` says. Sending it here (and to
+  // the app's /auth/callback) establishes the session in our cookies — without
+  // this it falls back to the project's SITE_URL and the invite lands on
+  // /login with no session, which reads as "the sign-in page instead of the
+  // app". NEXT_PUBLIC_APP_URL is set on Vercel (your deployed origin).
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(
+    /\/$/,
+    "",
+  );
+
   // Supabase sends the set-password link. We never see or set the password —
   // this app has no code path that handles one other than at sign-in.
-  const { data, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email);
+  const { data, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${appUrl}/auth/callback?next=/dash`,
+  });
 
   if (inviteError || !data.user) {
     return { error: "Could not send that invitation." };
