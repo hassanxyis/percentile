@@ -728,21 +728,21 @@ Roughly twenty hours a week. Twelve milestones, now **~15 weeks / ~300 hours** �
 step or GET2 under schedule pressure. Do not start a milestone before the previous one's test
 passes.
 
-> **Progress: M0–M5 complete. M6 is next.**
+> **Progress: M0–M6 complete. M7 is next.**
 >
 > M0–M3 built the repo, the instrument loader, the pure scoring modules and O*NET matching.
 > M4 added auth, RLS and the R9 trigger, with 18 database tests proving them against a real
 > Postgres in CI. M5 added roster import: a counsellor signs in, creates a cohort, uploads a CSV,
-> and gets 20 `invited` participants plus one queued `send_email` job each.
+> and gets 20 `invited` participants plus one queued `send_email` job each. M6 built the taker at
+> `/a/[token]`, so those invite links now resolve: consent, both modules one item per screen,
+> autosave, resume, and a submission that queues a `score_session` job.
 >
-> Verified against the live Supabase project, not only in CI: a deliberately broken 20-row file
-> reported six errors on rows 4, 5, 6, 7, 8 and 10 — spreadsheet line numbers, all at once, nothing
-> imported — then a clean file imported 20 students.
+> **Nothing drains the queue.** `engine/app/email.py` still does not exist and the job runner is
+> M7, so both job kinds now sit unclaimed. That ordering was deliberate and has paid off — the
+> taker flow existed before any invite was sent, so no student got a link to a 404.
 >
-> **Nothing sends email yet.** `engine/app/email.py` does not exist and the job runner is M7, so
-> the queued invites sit unclaimed. **`/a/[token]` does not exist either** — it is M6, and until it
-> does, every invite link 404s. That ordering is deliberate: sending invites before the taker flow
-> exists would put a broken link in twenty students' inboxes.
+> M7's `send_email` handler must mint a fresh token at send time; only `sha256(token)` was ever
+> stored, so it cannot reconstruct the link the import screen handed out (§12).
 
 ### M0 — Repo and skeleton *(week 1, ~4 h)*
 Unchanged from v1. **Done when:** `pytest` and `next build` pass in CI on an empty project.
@@ -788,33 +788,41 @@ the v1 document is not in the repository:
 Import goes through `import_roster()` (`db/migrations/0005_import_roster.sql`) so participants,
 jobs and the audit row land in one transaction. See §12 for the constraint this places on M7.
 
-### M6 — Taker flow *(weeks 5–6, ~22 h — was 20h)* — **NEXT**
-Consent (with the review disclosure), both Likert modules, GET2, the progress-path and
+### M6 — Taker flow *(weeks 5–6, ~22 h — was 20h)* — **DONE**
+Consent (with the review disclosure), both Likert modules, the progress-path and
 module-transition polish from §13, autosave, resume.
 
-**Where M5 left it.** `web/app/a/[token]/` does not exist, so every invite link currently 404s —
-this is the milestone that fixes that. Twenty `invited` participants and twenty queued
-`send_email` jobs are already in the database from M5's verification run; they are useful test
-data, not a problem to clean up.
-
-**Start here.** The token is the student's entire authentication (§5, `0002_rls.sql`): resolve
-`sha256(token) → participants.invite_token_hash` in a server action using the service role, and
-**never accept a `participant_id` from the client** — that rule is in `0002_rls.sql`'s header and
-is the one thing in this milestone that must not be got wrong. `web/lib/dal.ts` is for
-counsellors and does not apply here; students are never authenticated and get no Supabase session.
-
-**GET2 is not loadable yet.** `data/instruments/get2_items.csv` and `get2_scoring.json` are absent
-(§20 item 2 — the item count and response scale were never pinned from the primary source), so
-`instruments` has no `get2` row and `load_instruments.py` skips it with a warning. Build the
-module-3 path against the `module_not_administered` shape that `score_get2` already returns and
-`test_get2.py` already covers, and treat the two-module assessment as the shape that ships. Adding
-GET2 later is then loading a file, not editing the taker flow.
-
-`participants.status` moves `invited → started` on consent and `started → submitted` on the final
-item; §5's state machine is the reference.
 **Done when:** you complete the full assessment on a real mid-range Android phone, kill the
 connection mid-module, reopen, and resume with nothing lost — and it does not feel like filling out
-a government form.
+a government form. *Automated checks pass; the phone test is still outstanding and is the one that
+actually closes this milestone.*
+
+Four things in this milestone were decided rather than inherited:
+
+- **Widgets are chosen by an item's response range, not by its instrument.** 0..1 renders two
+  buttons, anything wider an N-point scale (`web/lib/taker.ts`). This is what makes R10's "adding
+  GET2 is loading a file" literally true — GET2's 0..2 renders and validates with no change to the
+  taker. A test asserts it, because the shortcut of switching on `instrument_code` would work today
+  and break that promise silently.
+- **The per-answer write is a route handler**, not a server action (`a/[token]/answer/route.ts`).
+  Actions are queued sequentially per client and carry a re-render payload each — wrong shape for
+  110 rapid taps on school wifi. Consent and submit remain actions.
+- **Answers post fire-and-forget** with an in-memory retry queue and a `pagehide` flush. A write
+  that never lands leaves the item unanswered, and resume re-asks it — which is why the queue can
+  give up rather than block the student behind a spinner. Nothing is written to localStorage;
+  school phones get shared (§16).
+- **Three writes moved into SQL** (`0006_taker_flow.sql`), following `import_roster()`'s precedent.
+  All are keyed on the token hash and none accepts a participant id, so `0002_rls.sql`'s rule holds
+  at the database boundary too. 19 tests in `engine/tests/db/test_taker_flow.py` cover it.
+
+One consequence worth knowing before M7: `submit_assessment` counts answers against **every**
+loaded item, so loading a new instrument mid-cohort blocks students already in flight. That is the
+loud failure and it is the right one — the quiet alternative scores a module nobody answered. Drain
+in-flight sessions before loading GET2.
+
+**The consent copy is a draft** and carries a `TODO(§20 item 8)`. It discloses the review step
+(§13) and avoids clinical framing (R7), but §20 item 8 asks for a counsellor or someone at GIFT to
+review the wording before it reaches a real cohort.
 
 ### M7 — Job runner *(week 7, ~8 h)*
 Unchanged from v1, plus `notify_psychologist` and `review_reminder` job kinds.

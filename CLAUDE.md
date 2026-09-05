@@ -4,23 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Where the build is
 
-**M0–M5 are done. M6 (the taker flow) is next.** `plan.md` §17 carries the detail; the short
+**M0–M6 are done. M7 (the job runner) is next.** `plan.md` §17 carries the detail; the short
 version:
 
-A counsellor can sign in, create a cohort, upload a roster CSV, and see 20 students land as
-`invited`. Auth, RLS, the R9 trigger and roster import are all covered by tests that run against a
-real Postgres in CI.
+A counsellor can sign in, create a cohort and upload a roster CSV. A student can open their invite
+link, consent, answer both modules on a phone, close the tab mid-way, come back and resume where
+they left off, and submit — which queues a `score_session` job. Auth, RLS, the R9 trigger, roster
+import and the three taker-flow SQL functions are all covered by tests that run against a real
+Postgres in CI.
 
-Two things are deliberately not built yet, and both matter before you touch anything invite-shaped:
+**Nothing drains the queue, and nothing sends email.** `engine/app/email.py` does not exist and
+`resend_api_key` sits unused in `engine/app/config.py`. Both the `send_email` jobs from M5 and the
+`score_session` jobs from M6 sit unclaimed until M7 builds the runner. That is the next milestone
+and it now has two job kinds waiting for it, not one.
 
-- **`web/app/a/[token]/` does not exist**, so every invite link 404s. That is M6.
-- **Nothing sends email.** `engine/app/email.py` does not exist; `resend_api_key` sits unused in
-  `engine/app/config.py`. M5 enqueues `send_email` jobs and the runner that drains them is M7. Do
-  not wire Resend before M6 ships — invites would carry links to a 404.
+M7's `send_email` handler **must mint a fresh token at send time** — only `sha256(token)` is ever
+stored, so it cannot reconstruct the link M5 handed out. `0005_import_roster.sql`'s closing comment
+and `plan.md` §12 both spell this out.
 
-The live Supabase project already holds one organisation, one `org_admin`, one cohort, 20
-participants and 20 queued jobs from M5's verification run. Useful test data; not something to
-clean up.
+The live Supabase project holds one organisation, one `org_admin`, one cohort, and M5's 20
+participants with their queued jobs. Note that those 20 students' raw tokens existed only in the
+one-time CSV download from the import screen, so their links are not recoverable — upload a fresh
+roster when you need a working link to test with.
 
 ## Read plan.md first
 
@@ -236,30 +241,52 @@ touching consent, retention, deletion or anything that sends data outward.
   without the denominator beside it; never compare cohorts without both `n`s; the report says
   "classed misaligned by this instrument", never "in the wrong field".
 
-## Starting M6 — the taker flow
+## The taker flow (`web/app/a/[token]/`)
 
 The student side has no auth session and no DAL. `web/lib/dal.ts` is for counsellors; do not reach
-for it in `app/a/[token]/`.
+for it here.
 
-**The token is the whole of a student's authentication.** A server action resolves
+**The token is the whole of a student's authentication.** `queries.ts` resolves
 `sha256(token) → participants.invite_token_hash` using the service role, and — quoting
-`0002_rls.sql`'s header — those actions "must never accept a `participant_id` from the client, only
-a token." Accepting an id from the request would let anyone read or write any student's session by
-guessing a uuid. This is the single rule in M6 that must not be got wrong.
+`0002_rls.sql`'s header — the taker "must never accept a `participant_id` from the client, only a
+token." `0006_taker_flow.sql` states the same rule in SQL: all three functions take
+`p_token_hash` and none takes a participant or session id, so a caller that forgets cannot express
+the mistake. Do not add an id argument to any of them as a shortcut.
 
 Tokens are 256-bit base64url, minted in `web/app/dash/cohorts/[id]/upload/actions.ts`. Only the
 sha256 is stored, so a token cannot be looked up or recovered — it can only be checked.
 
-**GET2 cannot be administered yet.** `data/instruments/get2_items.csv` and `get2_scoring.json` are
-absent (plan §20 item 2 — the item count and response scale were never pinned from the primary
-source), so `instruments` has no `get2` row and `load_instruments.py` skips it with a warning.
-Build module 3 against the `module_not_administered` shape `score_get2` already returns; two
-modules is the shape that ships. Adding GET2 later should be loading a file, not editing the taker
-flow — R10 says the code must not assume GET2 is guaranteed.
+Three things here look like inconsistencies with the rest of the app and are deliberate:
 
-`participants.status` moves `invited → started` on consent, `started → submitted` on the last item
-(plan §5). The consent screen must disclose the psychologist review step in plain language (§13,
-§16), and R7 forbids describing it as therapy or a clinical service.
+- **The answer write is a route handler, not a server action.** Next queues actions sequentially
+  per client and each response carries a re-render payload; across ~110 rapid taps that is a queue
+  the student outruns. `answer/route.ts` is parallel-safe, answers in a few dozen bytes, and works
+  with `sendBeacon` on `pagehide`. It re-adds the Origin check that actions get for free. Consent
+  and submit stay actions — they are navigations.
+- **Resume derives from `responses`, never from `sessions.progress`** (R1). `progress` is a
+  counsellor-facing summary that can drift; the raw answers are the record.
+- **`/a/` is excluded from `proxy.ts`'s matcher.** Students have no session to refresh, so
+  including it bought a `supabase.auth.getUser()` round trip per answer.
+
+**No widget decision reads `instrument_code`.** `widgetForItem` in `web/lib/taker.ts` picks from
+the item's own `response_min`/`response_max`: 0..1 renders two buttons, anything wider renders an
+N-point scale. That is what makes R10's promise real — GET2's 0..2 will render, and
+`record_response` will validate it, with no change here. `taker.test.ts` asserts it; if a future
+change starts switching on the instrument code, that test is the one that should stop you.
+
+**GET2 still cannot be administered.** `data/instruments/get2_items.csv` and `get2_scoring.json`
+are absent (plan §20 item 2), so `instruments` has no `get2` row, `MODULE_ORDER` filters it out,
+and two modules is what ships.
+
+One consequence of `submit_assessment` counting against *every* loaded item: loading a new
+instrument mid-cohort blocks students already in flight, because the assessment they started is no
+longer the one the system defines. That failure is loud on purpose — the quiet alternative is
+scoring a module nobody answered. Drain in-flight sessions before loading a new instrument.
+
+**The consent copy is a draft and is marked `TODO(plan.md §20 item 8)`.** §20 item 8 says the
+wording needs a counsellor or someone at GIFT to review it, not to be drafted solo. It discloses
+the psychologist review step (§13, §16) and avoids clinical framing (R7), but it should not go in
+front of a real cohort unreviewed.
 
 ## The roster CSV and `intended_field`
 
@@ -281,6 +308,22 @@ also inherited from the missing v1 doc, so the list there was chosen, not carrie
 starter list to revise with a counsellor before the pilot. It cannot be free text: M11's congruence
 rate groups on this column, and "pre-med" / "MBBS" / "Medicine" would arrive as three fields with
 an n of 1 each — which §9's statistical honesty rule then forbids reporting on.
+
+**A student is unique per cohort by `lower(email)`** — `participants_cohort_email_unique`
+(`0007_participant_email_unique.sql`). Scoped to the cohort, not the organisation, so a student
+reassessed in a later intake year is a new row and §10's year-on-year comparison still works.
+
+That index closes an M5 bug found during M6's end-to-end test: `parseRosterCsv` dedupes emails
+within a single file, but the only unique column was `invite_token_hash`, which is freshly minted
+per import — so uploading the same roster twice inserted a second full set and twenty students
+became forty. It also made the `23505` branch in `upload/actions.ts` unreachable for a duplicated
+student; that branch now names who collided.
+
+If you ever need to clean duplicates again, `scripts/find-duplicate-participants.sql` is the
+review-first tool. **Its keep-rule ranks by answer count, not by age**, and that is load-bearing:
+on the M6 test cohort the student's 110 responses were on the *later* copy, so keeping "the oldest"
+would have deleted the only real assessment in the database. Deleting a participant cascades to
+sessions and responses, and raw responses are unrecoverable (R1).
 
 Roster import goes through `import_roster()` (`db/migrations/0005_import_roster.sql`), not through
 separate inserts. supabase-js speaks REST, so participants and jobs would otherwise be separate
@@ -318,7 +361,13 @@ Three things about this harness will look wrong and are not:
 
 The R9 tests build their own rows; the RLS tests read the seed. That split is deliberate: the
 "blocks" case needs a session with *no* review, and if it read seed state a later seed change that
-added one would silently flip it to a false pass.
+added one would silently flip it to a false pass. `test_taker_flow.py` does the same for the same
+reason — every seeded participant has already consented and submitted, so its `invited` fixture is
+built fresh.
+
+The harness globs `db/migrations/[0-9][0-9][0-9][0-9]_*.sql`, so a new migration is picked up
+without editing `harness.py`. It does mean a migration that fails to apply breaks every db test at
+once rather than one — check the first failure's SQL error before assuming the tests are wrong.
 
 ## Next.js version warning
 

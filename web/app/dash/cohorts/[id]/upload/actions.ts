@@ -43,6 +43,38 @@ function mintToken(): { token: string; hash: string } {
   return { token, hash: createHash("sha256").update(token).digest("hex") };
 }
 
+/**
+ * Which of these emails are already on the cohort.
+ *
+ * Only called after a 23505, to turn "some of these students" into their actual
+ * names. A counsellor looking at a 40-row file needs to know which rows to
+ * remove; the generic message leaves them comparing two lists by hand.
+ */
+async function findExistingEmails(
+  admin: ReturnType<typeof createAdminClient>,
+  cohortId: string,
+  emails: string[],
+): Promise<{ full_name: string; email: string | null }[]> {
+  const { data } = await admin
+    .from("participants")
+    .select("full_name, email")
+    .eq("cohort_id", cohortId)
+    .in("email", emails);
+
+  return data ?? [];
+}
+
+/** "Fatima Khan", or "Fatima Khan and Hamza Ali", or "Fatima Khan, Hamza Ali and 3 others". */
+function listNames(rows: { full_name: string }[]): string {
+  const names = rows.map((row) => row.full_name);
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  if (names.length <= 4) {
+    return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  }
+  return `${names.slice(0, 3).join(", ")} and ${names.length - 3} others`;
+}
+
 export async function importRoster(
   _state: ImportState,
   formData: FormData,
@@ -91,15 +123,33 @@ export async function importRoster(
   });
 
   if (error) {
-    // 23505 is a unique violation, which for this table means the email or the
-    // roll number is already on this cohort's roster. Re-importing a corrected
-    // file is the common cause, so say that rather than "database error".
-    const isDuplicate = error.code === "23505";
+    // 23505 is a unique violation. Since 0007 that means an email already on
+    // this cohort's roster — `participants_cohort_email_unique`.
+    //
+    // Until 0007 this branch could not fire for a duplicated student: the only
+    // unique column was `invite_token_hash`, which is freshly minted per import,
+    // so re-uploading the same file inserted a second full set of participants
+    // instead of being refused. That is how twenty students became forty during
+    // M6's end-to-end test.
+    if (error.code === "23505") {
+      const duplicates = await findExistingEmails(
+        admin,
+        cohortId,
+        parsed.rows.map((row) => row.email),
+      );
+      return {
+        status: "error",
+        message: duplicates.length
+          ? `Nothing was imported. ${listNames(duplicates)} ${
+              duplicates.length === 1 ? "is" : "are"
+            } already on this roster.`
+          : "Nothing was imported. Some of these students are already on this roster.",
+      };
+    }
+
     return {
       status: "error",
-      message: isDuplicate
-        ? "Some of these students are already on this roster. Remove them from the file and upload again."
-        : "The import did not go through. Nothing was saved.",
+      message: "The import did not go through. Nothing was saved.",
     };
   }
 

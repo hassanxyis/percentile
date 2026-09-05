@@ -173,6 +173,79 @@ def test_rolls_back_entirely_when_one_row_collides(conn: psycopg.Connection) -> 
         assert cur.fetchone()[0] == 0
 
 
+def test_re_importing_the_same_roster_is_refused(conn: psycopg.Connection) -> None:
+    """The M5 bug M6's end-to-end test found.
+
+    `parseRosterCsv` dedupes emails within one file, but the only unique column
+    used to be `invite_token_hash` — freshly minted per import. So uploading the
+    same file twice inserted a second full set of participants and twenty
+    students became forty, one copy `Invited` and one `Submitted`.
+
+    `participants_cohort_email_unique` (0007) is what refuses it. Fresh token
+    hashes on the second attempt, exactly as the real action produces, so this
+    fails if the index is ever dropped rather than passing for the wrong reason.
+    """
+    first = [roster_row(n) for n in range(1, 21)]
+    assert import_roster(conn, first) == 20
+
+    second = [
+        roster_row(n, token_hash=f"harness-second-import-hash-{n:04d}")
+        for n in range(1, 21)
+    ]
+
+    with pytest.raises(psycopg.errors.UniqueViolation), conn.transaction():
+        import_roster(conn, second)
+
+    with conn.cursor() as cur:
+        cur.execute("select count(*) from participants where external_ref like 'H-%'")
+        assert cur.fetchone()[0] == 20
+
+
+def test_the_same_student_may_appear_in_a_different_cohort(
+    conn: psycopg.Connection,
+) -> None:
+    """Scoped to the cohort, not the organisation.
+
+    A student reassessed in a later intake year is a new cohort and a new row.
+    Blocking that would break the year-on-year comparison §10 exists for.
+    """
+    conn.execute(
+        """
+        insert into cohorts (id, organisation_id, name, intake_year, education_level)
+        values (%s, %s, 'Class of 2028 — Pre-Medical A', 2028, 'intermediate')
+        """,
+        ("c0000003-0000-4000-8000-00000000000c", harness.ORG_A),
+    )
+
+    assert import_roster(conn, [roster_row(1)]) == 1
+    assert (
+        import_roster(
+            conn,
+            [roster_row(1, token_hash="harness-next-year-hash-0001")],
+            cohort_id="c0000003-0000-4000-8000-00000000000c",
+        )
+        == 1
+    )
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "select count(*) from participants where email = 'harness1@example.edu.pk'"
+        )
+        assert cur.fetchone()[0] == 2
+
+
+def test_email_uniqueness_ignores_case(conn: psycopg.Connection) -> None:
+    """The index is on `lower(email)`, matching what roster-csv.ts already does
+    on the way in. Without it, Fatima@ and fatima@ are two students."""
+    import_roster(conn, [roster_row(1)])
+
+    shouting = roster_row(1, token_hash="harness-shouting-hash-0001")
+    shouting["email"] = shouting["email"].upper()
+
+    with pytest.raises(psycopg.errors.UniqueViolation), conn.transaction():
+        import_roster(conn, [shouting])
+
+
 def test_rejects_a_cohort_from_another_organisation(conn: psycopg.Connection) -> None:
     """The tenant check, which is the only one the database performs here.
 

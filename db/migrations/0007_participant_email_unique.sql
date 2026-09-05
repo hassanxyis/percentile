@@ -1,0 +1,61 @@
+-- One student, one row per cohort (plan.md §13, M5 bug found during M6).
+--
+-- Never edit a migration that has run. Add a new one.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- THE BUG THIS CLOSES
+--
+-- Re-importing the same roster CSV silently inserted a second full set of
+-- participants. `parseRosterCsv` dedupes emails within a single file, but the
+-- only unique column on `participants` was `invite_token_hash` — and every
+-- import mints fresh random tokens, so a second upload of the same file
+-- collided with nothing.
+--
+-- Found by uploading the same roster twice during M6's end-to-end test: twenty
+-- students appeared forty times, one copy `Invited` and one `Submitted`.
+--
+-- It also made a lie of the error handling. `upload/actions.ts` maps SQLSTATE
+-- 23505 to "Some of these students are already on this roster" — a branch that
+-- could not fire for a duplicated student, because nothing in the schema
+-- objected to one. This index is what makes that message true.
+--
+-- Why it matters beyond untidiness:
+--   * §10's congruence rate counts a duplicated student twice, and §9's
+--     statistical-honesty rules are about not misreporting exactly this sort of
+--     number.
+--   * §9.3 sizes a pilot at 15–25 reviews per psychologist per week. A
+--     duplicate consumes a review slot for a student who is already in the
+--     queue.
+--   * The student receives two invite emails and cannot tell which link is the
+--     real one.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- BEFORE THIS APPLIES
+--
+-- Creating this index FAILS if duplicates already exist. Run
+-- `scripts/find-duplicate-participants.sql` first — it shows the duplicate
+-- groups, shows how much real work is attached to each, and only then offers a
+-- delete. This migration deliberately does NOT clean up after itself: a
+-- migration that silently deletes participant rows (cascading to sessions and
+-- responses) is not a precedent worth setting in a repo where migrations run
+-- against production.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Scoped to the cohort, not the organisation. A student legitimately reassessed
+-- in a later intake year is a new cohort and a new row — blocking that would
+-- break the year-on-year comparison §10's cohort report is for.
+--
+-- `lower(email)` because the CSV parser already lowercases on the way in
+-- (`roster-csv.ts`), so this enforces the rule that layer is already applying
+-- rather than inventing a stricter one. Belt and braces: the parser catches it
+-- within a file, this catches it across imports.
+--
+-- Partial, because `participants.email` is nullable in 0001_init.sql. Postgres
+-- treats NULLs as distinct in a unique index anyway; `where email is not null`
+-- states the intent and keeps the index smaller. Note that the roster importer
+-- requires an email, so a NULL here can only come from a future path that
+-- creates participants some other way — that path should not be blocked by an
+-- index designed around CSV imports.
+create unique index if not exists participants_cohort_email_unique
+  on participants (cohort_id, lower(email))
+  where email is not null;
