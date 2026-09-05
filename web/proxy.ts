@@ -78,9 +78,15 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except static assets and image optimisation. The session needs
-  // refreshing on ordinary page loads, not just protected ones.
+  // Everything except static assets, image optimisation — and the student
+  // taker.
+  //
+  // `/a/*` is excluded because there is nothing there to do. Students are never
+  // authenticated (0002_rls.sql), so there is no session cookie to refresh, and
+  // the route is not in PROTECTED_PREFIXES so there is nothing to bounce. What
+  // is left is a `supabase.auth.getUser()` round trip on the hot path: one per
+  // answer, ~110 per student, on a phone on school wifi.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!a/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
