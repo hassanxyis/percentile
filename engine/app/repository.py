@@ -17,11 +17,23 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from app.config import TEMPLATE_VERSION
 from app.matching.occupations import Occupation
+from app.report.student import Direction, Match, Organisation, StudentReportInput
 from app.scoring.engine import SessionInput
 from app.scoring.types import Item, ScoringError
 
 log = logging.getLogger(__name__)
+
+
+class ReportNotAllowed(RuntimeError):
+    """R9: this session has no confirmed review, so no student report may exist.
+
+    Its own type rather than a `ScoringError`, because the two mean opposite
+    things to whoever reads the failed job. A ScoringError is "the data is
+    wrong"; this is "the data is fine and a human has not signed it off yet",
+    which is the system working.
+    """
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GET2_SCORING_PATH = REPO_ROOT / "data" / "instruments" / "get2_scoring.json"
@@ -213,6 +225,148 @@ def load_occupations(client) -> list[Occupation]:
             "the occupations table is empty — run scripts/load_onet.py against this database"
         )
     return occupations
+
+
+def load_student_report(client, session_id: str) -> StudentReportInput:
+    """Everything the student report renders from (plan §14, M9).
+
+    Reads the CONFIRMED review, and refuses without one. R9 is enforced by the
+    database trigger on `reports`, but discovering the violation at insert time
+    would mean the PDF was already rendered and uploaded — so the check happens
+    here too, before any work. Two enforcement points, neither redundant: this
+    one keeps an unreviewed student's data out of a rendered document at all.
+
+    Scores are read at the LATEST engine version present for the session, not at
+    `SCORING_ENGINE_VERSION`, for the same reason the review screen does it
+    (`web/app/review/[session_id]/queries.ts`): a rescore writes a new row beside
+    the old one (R1), and pinning to the current version would fail to render
+    every session scored before the last bump.
+
+    Deliberately does NOT load `scores.flags` or `reviews.interview_notes`.
+    R8 keeps flags off the student's copy and §16 treats the notes like health
+    data; a loader that fetched them would put one template mistake between
+    those rules and a student's inbox.
+    """
+    session = _one(
+        client.table("sessions").select("id, participant_id").eq("id", session_id).execute(),
+        f"no session {session_id}",
+    )
+    participant = _one(
+        client.table("participants")
+        .select("id, full_name, cohort_id")
+        .eq("id", session["participant_id"])
+        .execute(),
+        f"no participant for session {session_id}",
+    )
+    cohort = _one(
+        client.table("cohorts")
+        .select("id, name, organisation_id")
+        .eq("id", participant["cohort_id"])
+        .execute(),
+        f"no cohort for session {session_id}",
+    )
+    organisation = _one(
+        client.table("organisations")
+        .select("name, brand_hex, logo_path")
+        .eq("id", cohort["organisation_id"])
+        .execute(),
+        f"no organisation for session {session_id}",
+    )
+
+    review_rows = (
+        client.table("reviews")
+        .select("id, status, confirmed_at")
+        .eq("session_id", session_id)
+        .execute()
+    ).data or []
+    review = review_rows[0] if review_rows else None
+
+    if not review or review.get("status") != "confirmed":
+        # Not a ScoringError — nothing about the scores is wrong. This is the R9
+        # gate, and the message says so, because it will be read in
+        # `jobs.last_error` by someone deciding whether it is a bug.
+        raise ReportNotAllowed(
+            f"session {session_id} has no confirmed review — R9 forbids a student report"
+        )
+
+    score_rows = (
+        client.table("scores")
+        .select("engine_version, interests, personality, values_scores, scored_at")
+        .eq("session_id", session_id)
+        .order("scored_at", desc=True)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not score_rows:
+        raise ScoringError(f"session {session_id} has no scores row to report on")
+    score = score_rows[0]
+
+    match_rows = (
+        client.table("occupation_matches")
+        .select("rank, onet_soc_code, local_title, local_pathway, occupations(title)")
+        .eq("session_id", session_id)
+        .eq("engine_version", score["engine_version"])
+        .order("rank")
+        .execute()
+    ).data or []
+
+    direction_rows = (
+        client.table("career_directions")
+        .select("rank, onet_soc_code, local_title, rationale")
+        .eq("review_id", review["id"])
+        .order("rank")
+        .execute()
+    ).data or []
+
+    return StudentReportInput(
+        student_name=participant["full_name"],
+        organisation=Organisation(
+            name=organisation["name"],
+            brand_hex=organisation.get("brand_hex"),
+            logo_path=organisation.get("logo_path"),
+        ),
+        cohort_name=cohort["name"],
+        interests=score["interests"] or {},
+        personality=score["personality"] or {},
+        # `values_scores` holds the GET2 shape in v2; the column was not renamed
+        # so rescoreable history stays intact (0003_reviews.sql's comment).
+        get2=score.get("values_scores") or {},
+        matches=[
+            Match(
+                rank=row["rank"],
+                title=(row.get("occupations") or {}).get("title") or row["onet_soc_code"],
+                local_title=row.get("local_title"),
+                local_pathway=row.get("local_pathway"),
+                onet_soc_code=row["onet_soc_code"],
+            )
+            for row in match_rows
+        ],
+        directions=[
+            Direction(
+                rank=row["rank"],
+                local_title=row["local_title"],
+                rationale=row.get("rationale"),
+                onet_soc_code=row.get("onet_soc_code"),
+            )
+            for row in direction_rows
+        ],
+        confirmed_on=_report_date(review.get("confirmed_at")),
+        engine_version=score["engine_version"],
+        template_version=TEMPLATE_VERSION,
+    )
+
+
+def _report_date(value: str | None) -> str:
+    """`confirmed_at` as a student reads it — "12 March 2026".
+
+    Not ISO. This appears on the cover under a sixteen-year-old's name, and
+    `2026-03-12T09:14:22.481+00:00` reads as a machine's output rather than a
+    date a person signed something on.
+    """
+    stamp = _timestamp(value)
+    if stamp is None:
+        return "—"
+    return f"{stamp.day} {stamp.strftime('%B %Y')}"
 
 
 def load_get2_scoring() -> dict | None:

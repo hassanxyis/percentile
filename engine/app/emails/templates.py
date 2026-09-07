@@ -72,6 +72,38 @@ There is nothing you need to do in the meantime.
     return Message(to=to, subject=subject, text=text)
 
 
+def student_report(
+    *, to: str, first_name: str, organisation: str, link: str, days_valid: int
+) -> Message:
+    """The report is ready (§15). Carries a signed URL, never an attachment.
+
+    R8 and §16: a PDF attachment sits in an inbox forever, gets forwarded, and
+    is indexed by whatever scans the mailbox. A signed URL expires, so a link
+    that leaks stops working. `email.py`'s `Message` has no attachment field at
+    all, so this cannot quietly acquire one.
+
+    Says nothing about what the report contains. The interpretation is in the
+    document, written by a person and signed off by a person (R3, R9); a summary
+    line here would be neither.
+    """
+    subject = f"Your results from {organisation}"
+    text = f"""Hello {first_name},
+
+Your report is ready. A counsellor at {organisation} has been through your
+results and added their own notes.
+
+    {link}
+
+The link works for {days_valid} days. It is yours — please do not forward it.
+If it has expired by the time you get to it, ask {organisation} to send a new
+one; nothing is lost.
+
+The report is a starting point for a conversation with your counsellor, not a
+decision about your future.
+"""
+    return Message(to=to, subject=subject, text=text)
+
+
 # Staff-facing mails. Still no interpretation, and still no student's results in
 # the body — a mail client is not a place a minor's profile should be sitting.
 

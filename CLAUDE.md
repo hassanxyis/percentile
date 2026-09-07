@@ -4,10 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Where the build is
 
-**M0–M8 are written and tested; M0–M7 are LIVE. The engine is on Render; the web app is on
-Vercel. M9 (the student report) is next — `render_student` jobs now queue and fail with
-"not implemented until M9", which is the intended shape.** `plan.md` §17 carries the detail;
+**M0–M9 are written and tested; M0–M7 are LIVE. The engine is on Render; the web app is on
+Vercel. M10 (the counsellor dashboard) is next.** `plan.md` §17 carries the detail;
 the short version:
+
+> **M9 renders, but cannot yet produce a releasable report, and that is by design.**
+> `engine/app/content/interpretations.yaml` ships with all 45 interpretive strings EMPTY —
+> R3 says a person with psychology training writes them, and the loader raises
+> `InterpretationMissing` rather than defaulting. A `render_student` job therefore fails
+> until they are written. Run `python scripts/check_interpretations.py` for the worklist.
+> Do not fill that file in. `test_report_student.py` has a test that fails if you do.
 
 A counsellor can sign in, create a cohort and upload a roster CSV. A student can open their invite
 link, consent, answer both modules on a phone, close the tab mid-way, come back and resume where
@@ -44,19 +50,24 @@ A manual tick has been verified against the live engine: `/health` → `{"status
 - **Render env `APP_BASE_URL` is still `http://localhost:3000`.** Change it to
   `https://percentile-lyart.vercel.app` *before* setting `RESEND_API_KEY` — invite and review
   links are built from it, and a link to localhost reaches nobody.
-- `RESEND_API_KEY` is deliberately unset (`LoggingEmailer` drains with `NOT SENT`). Real email
-  should wait until M9's `render_student` exists — confirming a session in M8 enqueues
-  `render_student`, and no handler for it is implemented yet.
+- **A private Supabase Storage bucket named `reports` must exist** before any render succeeds
+  (`report_storage_bucket`). Private, not public: a public bucket makes a guessable URL a
+  minor's full profile, with no expiry and no audit. Delivery is a 7-day signed URL minted at
+  send time, never a PDF attachment (R8, §15).
 
 **M8 is built (`web/app/review/`, `db/migrations/0009_review_actions.sql`).** The queue, the
 detail screen and all three actions exist; `engine/tests/db/test_review_actions.py` asserts
 M8's done-when — a `reports` insert fails before confirmation and succeeds after.
 
-**Start here: M9 — the student report.** `render_student` jobs are now being queued by the
-confirm action and fail with "job kind 'render_student' is not implemented until M9"
-(`handlers/__init__.py`'s `NOT_YET_IMPLEMENTED`). That failure is the queue doing its job, not
-a bug: the work is recorded and waiting for a handler. See `plan.md` §14 for the ~13-page
-student report and R6's attribution requirement on every page.
+**M9 is built (`engine/app/report/`, `engine/app/content/`,
+`db/migrations/0010_student_reports.sql`).** `render_student` now has a handler: it loads a
+confirmed session, renders ~13 A4 pages through Jinja2 → WeasyPrint, uploads to the private
+`reports` bucket, records the row and queues the delivery email — all except the upload in one
+transaction (`record_student_report`). It fails, correctly, until the interpretation text is
+written.
+
+**Start here: M10 — the counsellor dashboard.** Roster view with the `pending_review` backlog,
+resend invites, report downloads, branding settings (`plan.md` §17 M10).
 
 ## Read plan.md first
 
@@ -425,6 +436,47 @@ Five decisions there are load-bearing:
 `review.test.ts`. One test there pins **every flag code `flags.py` can emit to a plain-language
 meaning** — §9.1 requires it, and the failure mode is silent: a new flag with no entry renders
 beside a blank explanation, which reads as "nothing to worry about".
+
+## The student report (`engine/app/report/`, `engine/app/content/`)
+
+M9. Jinja2 → HTML → WeasyPrint → PDF, ~13 A4 pages, delivered as a 7-day signed URL.
+
+The package splits the same way scoring does, and for the same reason: `student.py` (what
+appears on the page) and `charts.py` (hand-written SVG) are **pure**, so the R8 and R6 tests can
+assert against a rendered HTML string with no database and no font stack. `render.py` is the only
+impure module, and it imports WeasyPrint *inside* the function so the rest stays importable on a
+Windows machine.
+
+Five things here are load-bearing:
+
+- **`interpretations.yaml` ships empty and the loader raises.** R3 is a rule in a document;
+  `InterpretationMissing` is that rule with teeth. A blank string a template asks for fails the
+  render job — it does not become an empty paragraph a student reads as "the system had nothing
+  to say about me". `scripts/check_interpretations.py` prints the worklist. There is a test that
+  **fails if the interpretive strings get filled in**, because the likeliest thing to fill them
+  is a model, and that is the one thing R3 forbids. Structural text (`report.*`) and licence text
+  (`attribution.*`) are *not* interpretation and do ship written.
+- **`StudentReportInput` has no `flags` field** (R8). Not filtered in the template, not hidden
+  with CSS: absent, so a template edit cannot reintroduce it. Same for `interview_notes` (§16).
+  `load_student_report` does not select either column.
+- **R9 is checked three times** — in `load_student_report` before a PDF is built, in
+  `record_student_report` (0010) before a row is written, and by the trigger. None is redundant:
+  each covers a caller that skipped the one before. The first is the one that matters most,
+  because failing at the trigger means the PDF already exists in storage.
+- **The `reports` row and the delivery email are one transaction** (`record_student_report`,
+  0010_student_reports.sql), not two supabase-py calls. The handler originally deduped the email
+  with PostgREST's `payload->>template` filter syntax — used nowhere else in this codebase, and
+  its failure mode is *silent*: a filter matching nothing sends a student a second link. In SQL
+  it is an ordinary `where` that CI runs against real Postgres.
+- **Object keys are `<org-slug>/<session-id>.pdf`, never the student's name.** The key appears in
+  storage logs and inside the signed URL itself; `.../fatima-khan.pdf` tells anyone the link is
+  forwarded to who the report is about before they open it. The URL is minted at send time and
+  never stored — the same rule the invite token follows.
+
+`test_report_pdf.py` is the only test that runs WeasyPrint, and it skips locally by catching
+`Exception` (the import fails with `OSError` from cffi, which `pytest.importorskip` would not
+catch — it would abort collection for the whole suite). CI installs the Pango libraries, so that
+is where "works locally, blank PDF in production" gets caught.
 
 Two rules constrain what this screen may say. **R3:** nothing pre-fills a note or drafts a
 rationale — the psychologist's clinical voice is theirs. **R4:** no percentiles, so raw scores and

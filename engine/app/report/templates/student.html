@@ -1,0 +1,238 @@
+{#
+  Student report — ~13 pages (plan §14).
+
+  Every interpretive string here comes from `interpretations.yaml` via
+  `build_context`. There is no prose in this file about a student: if you find
+  yourself writing a sentence that describes a result, it belongs in the YAML
+  where a psychologist owns it (R3).
+
+  Two absences are deliberate and must stay:
+    * NO flags. `scores.flags` is not in the context at all (R8, student.py).
+    * NO interview notes. §16 treats them like health data; only the rationale
+      line the psychologist explicitly chose is here, on the directions page.
+
+  `|e` on every interpolation. `student_name`, `local_title` and `rationale` are
+  human-typed and reach this template unescaped otherwise — an ampersand in a
+  school's name is enough to break the render, and a rationale is free text.
+  Autoescape is on in `render.py`; the explicit filters are belt-and-braces on
+  the values that come from a form.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ student_name|e }} — {{ organisation.name|e }}</title>
+  <style>{{ stylesheet }}</style>
+</head>
+<body>
+
+{# Sets the running-footer string for every page (R6). #}
+<div class="attribution-anchor">{{ attribution.short|e }}</div>
+
+{# ── 1. Cover ─────────────────────────────────────────────────────────── #}
+<section class="page cover">
+  <div class="cover-rule" style="background: {{ brand|e }}"></div>
+  <p class="eyebrow">{{ organisation.name|e }}</p>
+  <h1>Your interests and how you work</h1>
+  <p class="muted">A starting point for a conversation, not a verdict.</p>
+
+  <p class="student">{{ student_name|e }}</p>
+  <p class="muted small">{{ cohort_name|e }} · reviewed {{ confirmed_on|e }}</p>
+
+  <div class="cover-foot">
+    <p>{{ confidential|e }}</p>
+    <p>{{ attribution.short|e }}</p>
+  </div>
+</section>
+
+{# ── 2. How to read this report (R7) ──────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">Before you start</p>
+  <h2>{{ how_to_read.title|e }}</h2>
+  <p>{{ how_to_read.body|e }}</p>
+  <div class="callout">
+    <p>{{ how_to_read.limits|e }}</p>
+  </div>
+</section>
+
+{# ── 3–4. Interests ───────────────────────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">Part one</p>
+  <h2>What you said you enjoy</h2>
+
+  <div class="chart">{{ interests.chart }}</div>
+
+  <p><strong>Your pattern: {{ interests.code|e }}</strong></p>
+  <p>{{ interests.band_text|e }}</p>
+
+  {% for caveat in interests.caveats %}
+    <p class="caveat">{{ caveat|e }}</p>
+  {% endfor %}
+</section>
+
+<section class="page">
+  <p class="eyebrow">Part one</p>
+  <h2>What each of your areas means</h2>
+
+  {% for letter in interests.letters %}
+    <div class="trait">
+      <h3>{{ letter.letter|e }}</h3>
+      <p>{{ letter.text|e }}</p>
+    </div>
+  {% endfor %}
+</section>
+
+{# ── 5–6. Personality ─────────────────────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">Part two</p>
+  <h2>How you tend to approach things</h2>
+
+  <div class="chart">{{ personality.chart }}</div>
+
+  <div class="callout">
+    <p class="small">{{ personality.provisional_note|e }}</p>
+  </div>
+</section>
+
+<section class="page">
+  <p class="eyebrow">Part two</p>
+  <h2>Your five areas in detail</h2>
+
+  {% for domain in personality.domains %}
+    <div class="trait">
+      <h3>{{ domain.label|e }} <span class="band">— {{ domain.band|e }}</span></h3>
+      <p>{{ domain.text|e }}</p>
+    </div>
+  {% endfor %}
+</section>
+
+{# ── 7. Entrepreneurial tendency — OMITTED ENTIRELY when not administered.
+       R10 / §14: "page omitted entirely (not shown blank)". `get2` is None,
+       not an empty dict, so this cannot render as a heading over nothing. #}
+{% if get2 %}
+<section class="page">
+  <p class="eyebrow">Part three</p>
+  <h2>Starting and running things</h2>
+
+  <div class="chart">{{ get2.chart }}</div>
+
+  <p><strong>{{ get2.band|e }}</strong> — {{ get2.band_text|e }}</p>
+
+  {% for subscale in get2.subscales %}
+    <div class="trait">
+      <h3>{{ subscale.label|e }} <span class="band">— {{ subscale.percent }}%</span></h3>
+      <p>{{ subscale.text|e }}</p>
+    </div>
+  {% endfor %}
+
+  {% if get2.flag_note %}
+    <div class="callout">
+      <p>{{ get2.flag_note|e }}</p>
+    </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ── 8–9. Occupation matches ──────────────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">Where this points</p>
+  <h2>{{ matches.title|e }}</h2>
+  <p>{{ matches.body|e }}</p>
+
+  {% if matches.local %}
+    <h3>With a study route in Pakistan</h3>
+    <table>
+      <thead>
+        <tr><th>Occupation</th><th>Typical route</th></tr>
+      </thead>
+      <tbody>
+        {% for match in matches.local %}
+          <tr>
+            <td>{{ match.local_title|e }}</td>
+            <td class="pathway">{{ (match.local_pathway or "—")|e }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</section>
+
+<section class="page">
+  <p class="eyebrow">Where this points</p>
+  <h2>Others with a similar profile</h2>
+
+  {% if matches.other %}
+    <table>
+      <thead>
+        <tr><th>Occupation</th></tr>
+      </thead>
+      <tbody>
+        {% for match in matches.other %}
+          <tr><td>{{ match.title|e }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Every occupation matched to your profile has a local study
+      route, and they are listed on the previous page.</p>
+  {% endif %}
+</section>
+
+{# ── 10. Your confirmed directions — the page a student keeps ─────────── #}
+<section class="page">
+  <p class="eyebrow">Agreed with your counsellor</p>
+  <h2>{{ directions.title|e }}</h2>
+  <p>{{ directions.body|e }}</p>
+
+  {% for direction in directions.chosen %}
+    <div class="direction">
+      <p class="rank">Direction {{ direction.rank }}</p>
+      <h3>{{ direction.local_title|e }}</h3>
+      {% if direction.rationale %}
+        <p class="rationale">“{{ direction.rationale|e }}”</p>
+      {% endif %}
+    </div>
+  {% endfor %}
+</section>
+
+{# ── 11. Agreement and tension ────────────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">Putting it together</p>
+  <h2>Where the two parts agree, and where they pull apart</h2>
+  <p>{{ cross.intro|e }}</p>
+  <p>{{ cross.text|e }}</p>
+</section>
+
+{# ── 12. Questions to bring ───────────────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">Take this with you</p>
+  <h2>Questions worth asking your counsellor</h2>
+  <ul class="questions">
+    {% for prompt in questions.prompts %}
+      <li>{{ prompt|e }}</li>
+    {% endfor %}
+  </ul>
+</section>
+
+{# ── 13. Method and attribution (R6) ──────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">For the record</p>
+  <h2>{{ method.title|e }}</h2>
+  <p>{{ method.body|e }}</p>
+
+  <h3>Attribution</h3>
+  <p class="attribution">{{ attribution.onet|e }}
+    <a href="{{ attribution.onet_licence_url|e }}">{{ attribution.onet_licence_url|e }}</a></p>
+  <p class="attribution">{{ attribution.ipip|e }}</p>
+  {% if attribution.get2 %}
+    <p class="attribution">{{ attribution.get2|e }}</p>
+  {% endif %}
+
+  <p class="attribution small">
+    Report {{ versions.template|e }} · scoring {{ versions.engine|e }} ·
+    {{ confidential|e }}
+  </p>
+</section>
+
+</body>
+</html>

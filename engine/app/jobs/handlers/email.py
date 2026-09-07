@@ -57,6 +57,8 @@ def handle(client, settings: Settings, job: Job) -> None:
         _send_invite(client, settings, job, emailer)
     elif template == "results_in_review":
         _send_results_in_review(client, settings, job, emailer)
+    elif template == "student_report":
+        _send_student_report(client, settings, job, emailer)
     elif template == "job_failed_alert":
         _send_job_failed_alert(settings, job, emailer)
     elif template == "review_backlog_alert":
@@ -130,6 +132,90 @@ def _send_results_in_review(client, settings: Settings, job: Job, emailer) -> No
             organisation=_organisation_name(client, participant_id),
         ),
     )
+
+
+def _send_student_report(client, settings: Settings, job: Job, emailer) -> None:
+    """Deliver the rendered report as a signed URL (§15, R8).
+
+    The URL is minted HERE, at send time, not stored on the `reports` row —
+    exactly the shape `_send_invite` uses for the invite token, and for the same
+    reason. A signed URL is a bearer credential to a minor's full profile; a
+    column holding one is a credential at rest, and this handler's failures are
+    retried, logged and emailed.
+
+    That also makes a resend trivially correct: the link is fresh every time,
+    so "please send it again" is re-queuing this job rather than a special path
+    that has to know how to re-sign an expired URL.
+    """
+    session_id = job.payload.get("session_id")
+    if not session_id:
+        raise HandlerError("student_report email has no session_id")
+
+    report = (
+        client.table("reports")
+        .select("storage_path, template_version, created_at")
+        .eq("session_id", session_id)
+        .eq("kind", "student")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not report:
+        # The render job writes this row before enqueueing the email, so this
+        # means the two came apart — worth retrying, since a render that is
+        # still in flight will produce it.
+        raise HandlerError(f"no student report row for session {session_id} yet")
+
+    session = (
+        client.table("sessions").select("participant_id").eq("id", session_id).execute()
+    ).data or []
+    if not session:
+        raise HandlerError(f"no session {session_id}")
+
+    participant = _participant(client, session[0]["participant_id"])
+    if not participant.get("email"):
+        raise HandlerError(f"participant {participant['id']} has no email address")
+
+    link = _signed_report_url(client, settings, report[0]["storage_path"])
+
+    _send(
+        emailer,
+        templates.student_report(
+            to=participant["email"],
+            first_name=_first_name(participant["full_name"]),
+            organisation=_organisation_name(client, participant["id"]),
+            link=link,
+            days_valid=settings.report_url_days,
+        ),
+    )
+
+    log.info("student report link sent for session %s", session_id)
+
+
+def _signed_report_url(client, settings: Settings, storage_path: str) -> str:
+    """A time-limited URL for one stored PDF.
+
+    Not wrapped in a try/except that logs the exception: a traceback here would
+    carry the signed URL in a local frame, and this handler's failure text goes
+    to `jobs.last_error` — the same rule the invite token follows.
+    """
+    seconds = settings.report_url_days * 24 * 3600
+    try:
+        signed = client.storage.from_(settings.report_storage_bucket).create_signed_url(
+            storage_path, seconds
+        )
+    except Exception as exc:
+        raise HandlerError(
+            f"could not sign a URL for the report: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    # storage3 returns both spellings of the same value (`_make_signed_url`),
+    # and sets both to None when the sign failed rather than raising. The `or`
+    # covers a future version dropping one; the falsy check covers the None.
+    url = (signed or {}).get("signedURL") or (signed or {}).get("signedUrl")
+    if not url:
+        raise HandlerError("storage returned no signed URL for the report")
+    return url
 
 
 def _send_job_failed_alert(settings: Settings, job: Job, emailer) -> None:

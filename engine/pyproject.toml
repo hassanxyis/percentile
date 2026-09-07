@@ -36,7 +36,10 @@ build-backend = "setuptools.build_meta"
 include = ["app*"]
 
 [tool.setuptools.package-data]
-app = ["report/templates/*", "content/*.yaml"]
+# The templates AND the stylesheet — `render.py` reads student.css off disk and
+# inlines it, so a wheel shipping only the .html renders an unstyled report that
+# still succeeds. interpretations.yaml is data the loader raises without.
+app = ["report/templates/*.html", "report/templates/*.css", "content/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

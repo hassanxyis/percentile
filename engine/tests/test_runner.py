@@ -160,13 +160,17 @@ def test_handler_error_message_reaches_last_error(fake_queue, monkeypatch):
 
 def test_unknown_kind_fails_the_job_rather_than_stranding_it(fake_queue, monkeypatch):
     """Retrying cannot help, but a job left `running` sits forever. Failing it
-    normally means it exhausts its attempts and alerts."""
-    fake_queue.batches = [[job(kind="render_student")], []]
+    normally means it exhausts its attempts and alerts.
+
+    `render_cohort` stands in for the shape now that M9 implemented
+    `render_student` — M11 is the milestone that will take this one off the list.
+    """
+    fake_queue.batches = [[job(kind="render_cohort")], []]
     monkeypatch.setattr(runner, "handler_for", handler_for)
 
     runner.run_tick(object(), SETTINGS)
 
-    assert "M9" in fake_queue.failed[0][1]
+    assert "M11" in fake_queue.failed[0][1]
 
 
 # ── the phases that must not be able to abort a tick ─────────────────────────
@@ -243,20 +247,31 @@ def test_zero_deadline_means_no_limit(fake_queue, monkeypatch):
 
 @pytest.mark.parametrize(
     "kind",
-    ["score_session", "match_occupations", "send_email", "notify_psychologist", "review_reminder"],
+    [
+        "score_session",
+        "match_occupations",
+        "send_email",
+        "notify_psychologist",
+        "review_reminder",
+        # M9. Enqueued by `save_review()` since M8, so it was the one kind the
+        # system queued and could not run; that gap is what M9 closed.
+        "render_student",
+    ],
 )
 def test_every_queued_kind_has_a_handler(kind):
-    """The two kinds sitting unclaimed since M5 and M6 are in this list. If one
-    of them lost its handler, the symptom in production would be an alert
-    saying "unknown job kind" about work the system itself enqueued."""
+    """Every kind anything in this system enqueues must be runnable. If one of
+    them lost its handler, the symptom in production would be an alert saying
+    "unknown job kind" about work the system itself queued."""
     assert callable(handler_for(kind))
 
 
 @pytest.mark.parametrize(
     ("kind", "milestone"),
-    [("render_student", "M9"), ("render_cohort", "M11"), ("recompute_norms", "M13")],
+    [("render_cohort", "M11"), ("recompute_norms", "M13")],
 )
 def test_unimplemented_kinds_name_their_milestone(kind, milestone):
+    """Nothing enqueues these yet, so the alert naming the milestone is the
+    right failure. `render_student` left this list in M9."""
     with pytest.raises(UnknownJobKind, match=milestone):
         handler_for(kind)
 

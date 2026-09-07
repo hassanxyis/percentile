@@ -23,7 +23,6 @@ from app.jobs.queue import Job
 # Failing with this is better than a bare KeyError: the alert then says what is
 # missing rather than that something went wrong.
 NOT_YET_IMPLEMENTED = {
-    "render_student": "M9",
     "render_cohort": "M11",
     "recompute_norms": "M13",
 }
@@ -49,7 +48,7 @@ def handler_for(kind: str) -> Handler:
     # and repository, and a circular import between this registry and the
     # handlers that reference it is otherwise easy to create by accident.
     from app.jobs.handlers import email as email_handler
-    from app.jobs.handlers import match, notify, score
+    from app.jobs.handlers import match, notify, render, score
 
     registry: dict[str, Handler] = {
         "score_session": score.handle,
@@ -57,6 +56,9 @@ def handler_for(kind: str) -> Handler:
         "send_email": email_handler.handle,
         "notify_psychologist": notify.handle_notify_psychologist,
         "review_reminder": notify.handle_review_reminder,
+        # Enqueued only by `save_review()` on the transition into `confirmed`
+        # (0009_review_actions.sql). Nothing else may queue it — R9.
+        "render_student": render.handle,
     }
 
     if kind in registry:

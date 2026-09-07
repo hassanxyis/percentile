@@ -146,6 +146,10 @@ def all_messages() -> list[Message]:
             to="ops@example.test", job_id="j1", job_kind="score_session",
             attempts=5, error="boom",
         ),
+        templates.student_report(
+            to="s@example.edu.pk", first_name="Fatima", organisation="GIFT",
+            link="https://storage.test/reports/x.pdf?token=abc", days_valid=7,
+        ),
     ]
 
 
@@ -183,6 +187,41 @@ def test_results_in_review_says_nothing_about_the_results():
 
     for leak in ("score", "your strengths", "suited", "recommend", "profile", "result show"):
         assert leak not in body
+
+
+def test_student_report_carries_a_link_and_its_expiry():
+    """§15: a 7-day signed URL. The expiry is stated because a student who opens
+    it in three weeks needs to know nothing is lost, not think it broke."""
+    message = templates.student_report(
+        to="s@example.edu.pk", first_name="Fatima", organisation="GIFT",
+        link="https://storage.test/reports/x.pdf?token=abc", days_valid=7,
+    )
+    assert "https://storage.test/reports/x.pdf?token=abc" in message.text
+    assert "7 days" in message.text
+
+
+def test_student_report_says_nothing_about_what_the_report_contains():
+    """R3: the interpretation is in the document, written and signed off by a
+    person. A summary line in an email would be neither, and it would sit in an
+    inbox where §16 says a minor's profile should not be."""
+    message = templates.student_report(
+        to="s@example.edu.pk", first_name="Fatima", organisation="GIFT",
+        link="https://storage.test/x.pdf", days_valid=7,
+    )
+    body = f"{message.subject} {message.text}".lower()
+
+    for leak in ("your strengths", "suited to", "we recommend", "holland", "your score"):
+        assert leak not in body
+
+
+def test_no_email_template_can_carry_an_attachment():
+    """R8/§16: never a PDF attachment — a signed URL that expires.
+
+    Asserted against the Message type rather than one template's body: an
+    attachment field would be the thing that made it possible, and it does not
+    exist. This fails if someone adds one.
+    """
+    assert set(Message.__dataclass_fields__) == {"to", "subject", "text", "html"}
 
 
 def test_backlog_alert_is_not_addressed_to_the_student():

@@ -1,0 +1,274 @@
+# Percentile — report interpretation text (plan.md §14, R3).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# THIS FILE IS A FORM. A PERSON WITH PSYCHOLOGY TRAINING FILLS IT IN.
+#
+# R3: "Interpretation text is written by a human with psychology training. The
+# differentiator of this product is that a trained person wrote the
+# interpretations. Generated interpretation copy is not defensible in a room
+# with a PhD in it."
+#
+# Every `""` below is deliberately empty and must NOT be filled by a language
+# model, including by the assistant that generated this file's structure. The
+# loader (`app/content/__init__.py`) raises `InterpretationMissing` on any blank
+# string a template asks for, so an unfinished file fails the render job rather
+# than producing a PDF with a polite gap in it.
+#
+# To see what is still unwritten:
+#     cd engine && python scripts/check_interpretations.py
+#
+# ── HOW TO WRITE THESE ───────────────────────────────────────────────────────
+#
+# Audience: a 16–18 year old in Pakistan, and the counsellor sitting with them.
+#
+# * R7 — no clinical language. Nothing here may read as diagnosis, treatment,
+#   pathology or a health service. "You tend to..." not "you suffer from...".
+#   Never "disorder", "symptom", "condition", "therapy", "patient", "treatment".
+# * Describe tendencies, never fix a person's identity. "often prefers" beats
+#   "is". A seventeen-year-old is allowed to change.
+# * Never name a specific career here. Occupation suggestions come from the
+#   matching engine and the psychologist's confirmed directions (§9.1) — a
+#   sentence in this file recommending "medicine" would reach every student who
+#   scored that way, having met none of them.
+# * These are bands on a provisional scale (R4 — no local norms until n >= 300).
+#   Do not write as though a score were a measured percentile.
+# * 40–70 words is the space the layout gives each block. Longer will overflow
+#   the page rather than being truncated.
+#
+# ── STRUCTURAL TEXT ──────────────────────────────────────────────────────────
+#
+# The strings under `report:` and `attribution:` are NOT interpretation — they
+# are page furniture, method description and licence text. They are filled in,
+# and the licence wording in particular is quoted verbatim from the licensor and
+# must not be reworded. Everything else on this page is yours to write.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INTERESTS — RIASEC (§14 pp. 3–4)
+# ─────────────────────────────────────────────────────────────────────────────
+interests:
+  # One paragraph per Holland letter, read when the letter appears in the
+  # student's three-letter code. Written about the interest area itself, not
+  # about the student's score in it.
+  letters:
+    R: ""   # Realistic  — practical, hands-on, tools, machines, outdoors
+    I: ""   # Investigative — ideas, analysis, research, figuring things out
+    A: ""   # Artistic — expression, design, originality, unstructured work
+    S: ""   # Social — teaching, helping, working directly with people
+    E: ""   # Enterprising — persuading, leading, selling, starting things
+    C: ""   # Conventional — order, accuracy, records, clear procedures
+
+  # How clearly the profile separated. `score_interests` returns exactly these
+  # three band names (engine/app/scoring/interests.py).
+  bands:
+    well_differentiated: ""
+    moderate: ""
+    # §7.1: "The report must say this in words and tell the counsellor to
+    # explore rather than recommend." This is the one band where the honest
+    # message is that the questionnaire did not settle the question.
+    undifferentiated: ""
+
+  # Shown when the third letter of the code was decided by a gap too small to
+  # rely on (`code_provisional`). Explains why the third letter may move.
+  code_provisional: ""
+
+  # Shown when two scales tied and the order was resolved by convention
+  # (`tie_broken`), so a student comparing with a friend is not confused.
+  tie_broken: ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PERSONALITY — IPIP Big Five (§14 pp. 5–6)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Note the fifth domain is Emotional Stability, not Neuroticism
+# (engine/app/scoring/personality.py: "a report handed to a seventeen-year-old
+# should not lead with a negatively framed trait name"). Keep that framing.
+#
+# Five bands per domain, matching PROVISIONAL_BAND_CUTOFFS. Write "very low"
+# and "low" with particular care: there is no bad end of any of these scales,
+# and a student will read their lowest bar first.
+personality:
+  domains:
+    O:   # Openness to Experience
+      very low: ""
+      low: ""
+      average: ""
+      high: ""
+      very high: ""
+    C:   # Conscientiousness
+      very low: ""
+      low: ""
+      average: ""
+      high: ""
+      very high: ""
+    E:   # Extraversion
+      very low: ""
+      low: ""
+      average: ""
+      high: ""
+      very high: ""
+    A:   # Agreeableness
+      very low: ""
+      low: ""
+      average: ""
+      high: ""
+      very high: ""
+    S:   # Emotional Stability
+      very low: ""
+      low: ""
+      average: ""
+      high: ""
+      very high: ""
+
+  # One paragraph on the page, explaining that these are provisional bands from
+  # a first sample and not percentiles against Pakistani students (R4).
+  provisional_note: ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENTREPRENEURIAL TENDENCY — GET2 (§14 p. 7)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# R10: GET2 is provisional pending written permission from The Open University /
+# Dr. Sally Caird. This whole page is omitted — not shown blank — when the
+# module was not administered, which is every session today. Fill it when the
+# module goes live; the loader will not ask for these strings before then.
+get2:
+  subscales:
+    achievement: ""
+    autonomy: ""
+    creativity: ""
+    risk_taking: ""
+    control: ""
+  bands:
+    emerging: ""
+    moderate: ""
+    strong: ""
+  # Shown when `entrepreneurial_flag` is true, explaining why extra
+  # entrepreneurship-track occupations appear in the matches (§8).
+  flag_note: ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CROSS-INSTRUMENT — where the modules agree or pull against each other (p. 11)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The page a counsellor said students find most useful. It is also the easiest
+# page to overclaim on: two instruments disagreeing is ordinary, not a problem
+# to be solved. Statistical honesty (§9) applies — describe what the answers
+# showed, never what the student "really is".
+cross:
+  # Opening paragraph for the page, whatever the pattern.
+  intro: ""
+  # Interests and personality point the same way.
+  aligned: ""
+  # They pull against each other — e.g. a Social code with low Extraversion.
+  tension: ""
+  # Nothing clear enough either way to comment on.
+  unclear: ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# QUESTIONS TO BRING TO YOUR COUNSELLOR (§14 p. 12)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A written list — 4 to 7 entries. These are the questions the report wants the
+# student to actually ask out loud, so write them in the student's voice, as
+# they would say them. Replace the empty strings; add or remove lines freely.
+questions:
+  prompts:
+    - ""
+    - ""
+    - ""
+    - ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STRUCTURAL TEXT — page furniture and method (NOT interpretation)
+# ─────────────────────────────────────────────────────────────────────────────
+report:
+  # Page 2. R7 lives here: this page sets what the report is and is not.
+  how_to_read:
+    title: "How to read this report"
+    body: >-
+      This report describes what you told us about the activities you enjoy and
+      how you tend to approach things. It is not a test you passed or failed,
+      and it is not a measure of ability or of what you are capable of. Nothing
+      here is a diagnosis or a health assessment.
+      The results are a starting point for a conversation, not a verdict. People
+      change, and answers given on a different day can come out differently. The
+      most useful thing you can do with this report is take it to your counsellor
+      and disagree with the parts that do not sound like you.
+    limits: >-
+      Two limits worth knowing. The scores are compared against provisional
+      bands rather than against other Pakistani students, because we do not yet
+      have a large enough local sample to do that honestly. And a questionnaire
+      only knows what you told it — it has not met you, seen your work, or
+      spoken to anyone who teaches you.
+
+  # Page 10 heading and framing, above the psychologist's own words. The
+  # rationale text on that page comes from `career_directions.rationale`, which
+  # the reviewing psychologist wrote in M8 — never from this file.
+  directions:
+    title: "Your confirmed directions"
+    body: >-
+      These directions were chosen with you by the counsellor who reviewed your
+      results, not generated automatically. The note under each one is in their
+      words. They are a place to start looking, not a decision you are now
+      committed to.
+
+  # Page 8–9, above the occupation table. §8's labelling requirement.
+  matches:
+    title: "Occupations to look into"
+    body: >-
+      These occupations have interest profiles that resemble yours. Resembling
+      your profile is not the same as being right for you: pay, entry routes,
+      family circumstances and what is actually available where you live all
+      matter and none of them are in this list. Occupations shown with a local
+      pathway have a recognised study route in Pakistan.
+    entrepreneurial_note: >-
+      These are shown because of your entrepreneurial tendency results, not
+      because they matched your interest profile most closely.
+
+  # Page 13.
+  method:
+    title: "Method and attribution"
+    body: >-
+      Your interests were measured with the O*NET Interest Profiler Short Form,
+      and your personality with the International Personality Item Pool
+      Big-Five factor markers. Occupation suggestions come from comparing your
+      interest profile against occupation profiles in the O*NET database, then
+      filtering by the level of education a role typically requires.
+      Every report is read by a counsellor before it is sent. Nothing in this
+      report was released automatically.
+
+  # Footer on every page, beside the organisation's name.
+  confidential: "Private — for the named student and their counsellor."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION — licence text, quoted verbatim (R6)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# R6 puts this on every report page and in the site footer; it is a term of the
+# licence, not a courtesy. DO NOT REWORD ANY STRING IN THIS BLOCK.
+#
+# The O*NET wording is the "modified content" variant from
+# https://www.onetcenter.org/license.html — Percentile localises occupation
+# titles and adds Pakistani study pathways (data/local/pk_occupation_map.csv),
+# so the unmodified-content wording would be the wrong one to quote. USDOL/ETA
+# requires that modifications be declared and disclaimed.
+attribution:
+  onet: >-
+    This report includes information from O*NET Resource Center by the U.S.
+    Department of Labor, Employment and Training Administration (USDOL/ETA).
+    Used under the CC BY 4.0 license. O*NET® is a trademark of USDOL/ETA.
+    Percentile has modified all or some of this information. USDOL/ETA has not
+    approved, endorsed, or tested these modifications.
+  onet_licence_url: "https://creativecommons.org/licenses/by/4.0/"
+  ipip: >-
+    Personality items are from the International Personality Item Pool
+    (ipip.ori.org), which is in the public domain.
+  # R10: replace this with the exact wording The Open University or Dr. Caird
+  # ask for once permission is confirmed (plan §20 item 1). Only read when the
+  # GET2 page renders, so the current provisional text cannot reach a student
+  # while the module is off.
+  get2: >-
+    The General Enterprising Tendency test (GET2) was developed by Dr. Sally
+    Caird at The Open University. Used with permission; see the method page.
+  # Shown on the footer beside the page number.
+  short: "O*NET® USDOL/ETA, CC BY 4.0 · IPIP public domain"

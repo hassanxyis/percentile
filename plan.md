@@ -765,7 +765,11 @@ Roughly twenty hours a week. Twelve milestones, now **~15 weeks / ~300 hours** �
 step or GET2 under schedule pressure. Do not start a milestone before the previous one's test
 passes.
 
-> **Progress: M0–M7 written, tested and LIVE. M8 (review portal) is next.** Engine runs as a
+> **Progress: M0–M9 written and tested; M0–M7 LIVE. M10 (counsellor dashboard) is next.**
+> M8 (review portal) and M9 (student report) are built but have not run against live data.
+> M9 additionally waits on the human-written interpretation text described under its milestone
+> below — the code raises rather than shipping a placeholder, so this is a real block, not a
+> polish item. Engine runs as a
 > Docker service on Render (`https://percentile-hwlu.onrender.com`); the web app is on Vercel
 > (`https://percentile-lyart.vercel.app`). `ENGINE_BASE_URL` / `ENGINE_SHARED_SECRET` are set on
 > GitHub, so `tick.yml` and `keepalive.yml` run. Occupations (923 + 10 localised) and items
@@ -780,10 +784,12 @@ passes.
 > autosave, resume, and a submission that queues a `score_session` job. M7 built the runner that
 > drains all of it.
 >
-> **Operational notes for whoever deploys/changes anything:** Render's `APP_BASE_URL` is still
-> `http://localhost:3000` — set it to the Vercel URL before any real email. `RESEND_API_KEY` is
-> unset on purpose (`LoggingEmailer` drains with `NOT SENT`); real mail waits until M9's
-> `render_student` handler exists, because confirming a session enqueues one. `load_onet.py`
+> **Operational notes for whoever deploys/changes anything:** Set Render's `APP_BASE_URL` to the
+> Vercel URL before any real email — invite and report links are built from it. Create a
+> **private** Supabase Storage bucket named `reports` before the first render; public would make
+> a guessable URL a minor's full profile. `RESEND_API_KEY` is unset on purpose (`LoggingEmailer`
+> drains with `NOT SENT`); turning it on now would start delivering real mail, and M9 still
+> refuses to render until the interpretation text is written. `load_onet.py`
 > writes one complete-row upsert now — the earlier two-partial-upsert shape could not run
 > against Supabase/PostgREST (commit `6155e36`). A phantom tick once reported work this
 > project's queue never did; check there is only one Render service before debugging a
@@ -924,11 +930,25 @@ would have failed (R9) before confirmation.
 that sentence, and CI runs it against a real Postgres. The human half — a psychologist actually
 sitting with the screen — has not happened; Fatima Khan is the seed case waiting for it.*
 
-### M9 — Student report *(weeks 9–10, ~26 h)*
+### M9 — Student report *(weeks 9–10, ~26 h)* — **BUILT (blocked on interpretation text)**
 Templates including the new confirmed-direction page (§14) and the conditional GET2 page.
 **Done when:** confirming a review in M8 produces a branded, ~13-page PDF in an inbox with no
 placeholder text anywhere and the confirmed directions rendered in the psychologist's own wording.
 **This is the milestone you take to your counsellor contacts to react to before the pilot.**
+
+*The machinery is built and tested: `render_student` has a handler, the report renders through
+WeasyPrint, uploads to a private bucket, records its row and queues a 7-day signed-URL email —
+all but the upload in one transaction (`0010_student_reports.sql`).*
+
+*It cannot produce a releasable report yet, and deliberately so. `engine/app/content/`
+`interpretations.yaml` ships with all 45 interpretive strings empty; the loader raises
+`InterpretationMissing` rather than defaulting, so a render fails until a person with psychology
+training writes them (R3). `python scripts/check_interpretations.py` prints the list. That is the
+remaining work on this milestone, and it is not code — which is why "no placeholder text
+anywhere" in the done-when is now enforced mechanically rather than checked by eye.*
+
+*Two operational prerequisites before the first real render: a **private** Supabase Storage
+bucket named `reports`, and `APP_BASE_URL` on Render pointing at the Vercel app.*
 
 ### M10 — Counsellor dashboard *(week 11, ~14 h)*
 Roster view with the new status vocabulary (including `pending_review` backlog visibility),

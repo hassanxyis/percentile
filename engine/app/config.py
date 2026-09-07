@@ -21,7 +21,12 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
     engine_shared_secret: str = ""
     resend_api_key: str = ""
+    # Must be a PRIVATE bucket. A public one means a guessable URL is a minor's
+    # full psychological profile, with no expiry and no audit trail. Delivery is
+    # a signed URL minted at send time (§15, R8).
     report_storage_bucket: str = "reports"
+    # How long a report link lives. plan §15: "a signed URL, expiring in 7 days".
+    report_url_days: int = 7
     scoring_engine_version: str = SCORING_ENGINE_VERSION
     app_base_url: str = "http://localhost:3000"
     log_level: str = "INFO"

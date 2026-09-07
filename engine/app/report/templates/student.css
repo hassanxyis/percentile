@@ -1,0 +1,227 @@
+/* Student report — A4, 18mm margins (plan §14).
+ *
+ * WeasyPrint's CSS support is print-shaped, not browser-shaped. Two things this
+ * file deliberately does not use, because they silently do nothing:
+ *   * flexbox/grid gap in older WeasyPrint — spacing is margins here
+ *   * web fonts fetched over HTTP — fonts ship in the image (CLAUDE.md ·
+ *     WeasyPrint), or the PDF falls back and looks wrong only in production
+ *
+ * DejaVu is the family bundled in the Dockerfile (`fonts-dejavu-core`) and in
+ * CI. Naming it first rather than relying on a generic keeps the two
+ * environments rendering the same metrics, which is what makes a page-break
+ * verified locally still hold on the server.
+ */
+
+@page {
+  size: A4;
+  margin: 18mm;
+
+  /* R6: attribution on every page, as a licence term — in the running footer
+   * so it cannot be lost by a page break, and so no template edit can drop it
+   * from one page while leaving it on the others. */
+  @bottom-left {
+    content: string(attribution-short);
+    font-family: "DejaVu Sans", sans-serif;
+    font-size: 6.5pt;
+    color: #7A8380;
+  }
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-family: "DejaVu Sans", sans-serif;
+    font-size: 7.5pt;
+    color: #7A8380;
+  }
+}
+
+/* The cover carries the attribution in the body instead; a footer under a
+ * full-bleed cover reads as a mistake. */
+@page :first {
+  @bottom-left { content: ""; }
+  @bottom-right { content: ""; }
+}
+
+html {
+  font-family: "DejaVu Sans", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: #1F2421;
+}
+
+body { margin: 0; }
+
+/* The string() the footer reads. Set once, on an element that appears before
+ * any page break, so every page has a value for it. */
+.attribution-anchor {
+  string-set: attribution-short content();
+  position: absolute;
+  visibility: hidden;
+  height: 0;
+}
+
+.page {
+  page-break-after: always;
+}
+.page:last-child {
+  page-break-after: auto;
+}
+
+/* Never split a heading from the text under it, or leave one line stranded. */
+h1, h2, h3 {
+  page-break-after: avoid;
+  margin: 0 0 8px;
+  line-height: 1.25;
+}
+p {
+  orphans: 2;
+  widows: 2;
+  margin: 0 0 10px;
+}
+
+h1 { font-size: 22pt; font-weight: 700; }
+h2 { font-size: 15pt; font-weight: 700; }
+h3 { font-size: 11.5pt; font-weight: 600; }
+
+.muted { color: #5C6663; }
+.small { font-size: 8.5pt; }
+
+/* ── cover ──────────────────────────────────────────────────────────────── */
+.cover {
+  height: 245mm;
+}
+.cover-rule {
+  height: 6px;
+  width: 64px;
+  margin: 0 0 26px;
+}
+.cover h1 {
+  font-size: 30pt;
+  margin-bottom: 4px;
+}
+.cover .student {
+  font-size: 17pt;
+  margin: 30px 0 2px;
+}
+.cover-foot {
+  position: absolute;
+  bottom: 0;
+  font-size: 8pt;
+  color: #7A8380;
+}
+
+/* ── section furniture ──────────────────────────────────────────────────── */
+.eyebrow {
+  font-size: 8pt;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #7A8380;
+  margin: 0 0 6px;
+}
+
+.chart {
+  margin: 14px 0 18px;
+}
+.chart svg {
+  max-width: 100%;
+}
+
+.callout {
+  border-left: 3px solid #D6D9D8;
+  padding: 2px 0 2px 14px;
+  margin: 14px 0;
+}
+
+/* Uncertainty notes — the provisional-code and tie-broken caveats. Quiet on
+ * purpose: they qualify a result rather than announcing a problem. */
+.caveat {
+  font-size: 9pt;
+  color: #5C6663;
+  margin: 4px 0;
+}
+
+.trait {
+  margin: 0 0 14px;
+  page-break-inside: avoid;
+}
+.trait h3 {
+  margin-bottom: 2px;
+}
+.trait .band {
+  font-size: 8.5pt;
+  color: #7A8380;
+  text-transform: lowercase;
+}
+
+/* ── occupation table ───────────────────────────────────────────────────── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 18px;
+}
+th {
+  text-align: left;
+  font-size: 8pt;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7A8380;
+  border-bottom: 1px solid #D6D9D8;
+  padding: 0 8px 5px 0;
+  font-weight: 600;
+}
+td {
+  padding: 7px 8px 7px 0;
+  border-bottom: 1px solid #ECEEED;
+  vertical-align: top;
+  font-size: 9.5pt;
+}
+tr {
+  page-break-inside: avoid;
+}
+.pathway {
+  color: #5C6663;
+  font-size: 8.5pt;
+}
+
+/* ── confirmed directions — the page a student keeps (§14 p.10) ─────────── */
+.direction {
+  border: 1px solid #D6D9D8;
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin: 0 0 12px;
+  page-break-inside: avoid;
+}
+.direction .rank {
+  font-size: 8pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7A8380;
+}
+.direction h3 {
+  font-size: 13pt;
+  margin: 3px 0 6px;
+}
+/* The psychologist's own words. Italic marks it as a quoted human voice
+ * rather than generated report copy (R3, §9.1). */
+.direction .rationale {
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── questions ──────────────────────────────────────────────────────────── */
+ul.questions {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+ul.questions li {
+  margin: 0 0 11px;
+  page-break-inside: avoid;
+}
+
+/* ── method page ────────────────────────────────────────────────────────── */
+.attribution {
+  font-size: 8.5pt;
+  color: #5C6663;
+  margin: 6px 0;
+}
+.attribution a {
+  color: #5C6663;
+}

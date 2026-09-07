@@ -109,6 +109,35 @@ def record_score(
     return result.data
 
 
+def record_student_report(
+    client,
+    session_id: str,
+    storage_path: str,
+    template_version: str,
+    engine_version: str,
+) -> str:
+    """Record the rendered report and queue its delivery, in one transaction.
+
+    Re-checks R9 inside the function (0010_student_reports.sql) even though the
+    handler refused to render without a confirmed review. The two checks answer
+    different questions: the handler's stops a PDF being built, this one stops a
+    row being written by any caller that skipped it.
+
+    Idempotent on (session, template_version), and the email is queued at most
+    once per session — a retried job must not send a student a second link.
+    """
+    result = client.rpc(
+        "record_student_report",
+        {
+            "p_session_id": session_id,
+            "p_storage_path": storage_path,
+            "p_template_version": template_version,
+            "p_engine_version": engine_version,
+        },
+    ).execute()
+    return result.data
+
+
 def record_occupation_matches(
     client, session_id: str, engine_version: str, matches: list[dict]
 ) -> int:
