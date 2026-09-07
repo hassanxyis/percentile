@@ -372,6 +372,33 @@ def test_onet_attribution_uses_the_modified_content_wording():
     assert "trademark of USDOL/ETA" in html
 
 
+def test_the_school_logo_appears_when_one_is_set():
+    """M10 lets an org_admin upload a crest; this is where it lands."""
+    report = _report(
+        organisation=Organisation(
+            name="Demo Academy",
+            brand_hex="#1C6A61",
+            logo_path="org-1/logo.png",
+            logo_url="https://storage.test/branding/org-1/logo.png",
+        )
+    )
+    html = render_html(build_context(report, _written()))
+
+    assert 'src="https://storage.test/branding/org-1/logo.png"' in html
+    assert 'alt="Demo Academy"' in html
+
+
+def test_no_broken_image_when_no_logo_is_set():
+    """Absent, not a placeholder.
+
+    A report from an institution that has not uploaded a crest should look
+    deliberate. `logo_url` is None whenever the path is unset *or* the URL
+    could not be resolved, so this is also the no-network case.
+    """
+    html = render_html(build_context(_report(), _written()))
+    assert "<img" not in html
+
+
 def test_the_charts_render_as_markup_rather_than_as_escaped_text():
     """Autoescape turns an SVG string into `&lt;svg...` visible on the page.
 

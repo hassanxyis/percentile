@@ -31,6 +31,13 @@
 
 {# ── 1. Cover ─────────────────────────────────────────────────────────── #}
 <section class="page cover">
+  {# The school's crest, when one is set. Absent rather than a placeholder: a
+     report from an institution that has not uploaded a logo should look
+     deliberate, not broken. #}
+  {% if organisation.logo_url %}
+    <img class="cover-logo" src="{{ organisation.logo_url|e }}"
+         alt="{{ organisation.name|e }}">
+  {% endif %}
   <div class="cover-rule" style="background: {{ brand|e }}"></div>
   <p class="eyebrow">{{ organisation.name|e }}</p>
   <h1>Your interests and how you work</h1>

@@ -27,9 +27,11 @@ function Feedback({ state }: { state: ActionState }) {
 export function OrganisationForm({
   name,
   brandHex,
+  hasLogo,
 }: {
   name: string;
   brandHex: string;
+  hasLogo: boolean;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     updateOrganisation,
@@ -39,6 +41,9 @@ export function OrganisationForm({
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <h2 className="text-sm font-medium">Institution</h2>
+      <p className="text-xs text-black/60 dark:text-white/60">
+        The name, colour and logo appear on every student report.
+      </p>
 
       <label className="flex flex-col gap-1 text-sm">
         <span>Name</span>
@@ -53,6 +58,24 @@ export function OrganisationForm({
           placeholder="#1C6A61"
           className={FIELD}
         />
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm">
+        <span>Logo</span>
+        {/* Not `required`: saving the name alone must not force a re-upload.
+            An empty file input arrives with size 0 and the action treats that
+            as "unchanged" rather than as a request to clear the logo. */}
+        <input
+          type="file"
+          name="logo"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          className={FIELD}
+        />
+        <span className="text-xs text-black/60 dark:text-white/60">
+          {hasLogo
+            ? "A logo is set. Choosing a file replaces it."
+            : "PNG, JPEG, WebP or SVG, up to 2 MB."}
+        </span>
       </label>
 
       <Feedback state={state} />

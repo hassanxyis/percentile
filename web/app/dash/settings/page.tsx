@@ -31,6 +31,7 @@ export default async function SettingsPage() {
       <OrganisationForm
         name={organisation?.name ?? ""}
         brandHex={organisation?.brand_hex ?? "#1C6A61"}
+        hasLogo={Boolean(organisation?.logo_path)}
       />
 
       <InviteMemberForm canInviteSuperadmin={session.role === "superadmin"} />

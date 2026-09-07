@@ -65,6 +65,11 @@ class Organisation:
     name: str
     brand_hex: str | None
     logo_path: str | None
+    # A resolved public URL for `logo_path`, or None. Built by the loader rather
+    # than the template: WeasyPrint fetches images at render time, and a
+    # relative storage path would resolve against the template directory and
+    # silently produce a report with no crest on it.
+    logo_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

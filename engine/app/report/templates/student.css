@@ -88,6 +88,16 @@ h3 { font-size: 11.5pt; font-weight: 600; }
 .cover {
   height: 245mm;
 }
+/* Bounded in both directions: a school's crest arrives at whatever dimensions
+ * someone had to hand, and an unconstrained 2000px PNG would push the title off
+ * the cover. `object-fit: contain` keeps a wide crest from being stretched. */
+.cover-logo {
+  max-height: 22mm;
+  max-width: 60mm;
+  object-fit: contain;
+  margin: 0 0 20px;
+}
+
 .cover-rule {
   height: 6px;
   width: 64px;

@@ -2,31 +2,23 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { verifySession } from "@/lib/dal";
-import { describeIntendedField } from "@/lib/intended-fields";
+import { progressSentence, summarise } from "@/lib/roster";
 
 import { getCohort, listParticipants } from "./queries";
+import { RosterTable } from "./roster-table";
 
 /**
- * /dash/cohorts/[id] — the roster (plan.md §13).
+ * /dash/cohorts/[id] — the roster (plan.md §10, §13, M10).
  *
- * Deliberately plain. M10 owns the counsellor dashboard: progress vocabulary,
- * resend, report downloads, branding. M5 needs somewhere an import visibly
- * lands, so this lists who is on the roster and what state each student is in.
+ * Answers the three questions a counsellor actually opens this screen with:
+ * who has not started, who am I waiting on, and whose report can I hand over.
+ *
+ * What it deliberately does not answer is "why does this student need a
+ * follow-up". A counsellor has no read policy on `reviews` at all, because RLS
+ * is row-scoped and any policy admitting them would expose `interview_notes` —
+ * which §16 treats like health data. "Follow-up needed" is the whole message;
+ * the rest is a conversation between two people.
  */
-
-/** Plain-language status. The vocabulary in §5 is for the system, not a reader. */
-const STATUS_LABEL: Record<string, string> = {
-  invited: "Invited",
-  started: "In progress",
-  submitted: "Submitted",
-  scored: "Awaiting review",
-  pending_review: "Awaiting review",
-  reviewed: "Being reviewed",
-  needs_more_info: "Follow-up needed",
-  confirmed: "Complete",
-  failed: "Problem",
-};
-
 export default async function CohortPage({ params }: PageProps<"/dash/cohorts/[id]">) {
   const { id } = await params;
   await verifySession();
@@ -40,16 +32,18 @@ export default async function CohortPage({ params }: PageProps<"/dash/cohorts/[i
   }
 
   const participants = await listParticipants(id);
+  // Computed once on the server and passed down, so the table's waiting times
+  // do not shift between server render and hydration.
+  const now = new Date();
+  const progress = summarise(participants, now);
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-16">
+    <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-16">
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{cohort.name}</h1>
           <p className="text-sm text-black/60 dark:text-white/60">
             {[cohort.education_level, cohort.intake_year].filter(Boolean).join(" · ")}
-            {participants.length > 0 &&
-              ` · ${participants.length} ${participants.length === 1 ? "student" : "students"}`}
           </p>
         </div>
 
@@ -72,35 +66,45 @@ export default async function CohortPage({ params }: PageProps<"/dash/cohorts/[i
           to add them.
         </p>
       ) : (
-        <table className="text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-black/50 dark:text-white/50">
-              <th className="py-2 pr-4 font-medium">Name</th>
-              <th className="py-2 pr-4 font-medium">Roll no.</th>
-              <th className="py-2 pr-4 font-medium">Intended field</th>
-              <th className="py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {participants.map((participant) => (
-              <tr
-                key={participant.id}
-                className="border-t border-black/10 dark:border-white/10"
-              >
-                <td className="py-2 pr-4">{participant.full_name}</td>
-                <td className="py-2 pr-4 text-black/60 dark:text-white/60">
-                  {participant.external_ref ?? "—"}
-                </td>
-                <td className="py-2 pr-4 text-black/60 dark:text-white/60">
-                  {describeIntendedField(participant.intended_field)}
-                </td>
-                <td className="py-2">
-                  {STATUS_LABEL[participant.status] ?? participant.status}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <section className="flex flex-wrap items-baseline gap-x-6 gap-y-2 text-sm">
+            <span className="font-medium">{progressSentence(progress)}</span>
+            {progress.notStarted > 0 && (
+              <span className="text-black/60 dark:text-white/60">
+                {progress.notStarted} not started
+              </span>
+            )}
+            {progress.inProgress > 0 && (
+              <span className="text-black/60 dark:text-white/60">
+                {progress.inProgress} in progress
+              </span>
+            )}
+            {progress.awaitingReview > 0 && (
+              <span className="text-black/60 dark:text-white/60">
+                {progress.awaitingReview} awaiting review
+              </span>
+            )}
+            {progress.needsAttention > 0 && (
+              <span className="text-red-700 dark:text-red-400">
+                {progress.needsAttention} needs attention
+              </span>
+            )}
+          </section>
+
+          {/* §9.4: a stalled queue is "an operational problem to fix". The
+              student is never told their report is late; the person who can
+              chase a reviewer is. */}
+          {progress.overdue > 0 && (
+            <p className="rounded border border-amber-500/40 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              {progress.overdue === 1
+                ? "1 student has been waiting more than five days for a review."
+                : `${progress.overdue} students have been waiting more than five days for a review.`}{" "}
+              Nothing has been said to them about the delay.
+            </p>
+          )}
+
+          <RosterTable participants={participants} now={now.toISOString()} />
+        </>
       )}
     </main>
   );

@@ -45,6 +45,7 @@ export type OrganisationRow = {
   name: string;
   slug: string;
   brand_hex: string | null;
+  logo_path: string | null;
 };
 
 export async function getOrganisation(): Promise<OrganisationRow | null> {
@@ -53,7 +54,7 @@ export async function getOrganisation(): Promise<OrganisationRow | null> {
 
   const { data } = await supabase
     .from("organisations")
-    .select("id, name, slug, brand_hex")
+    .select("id, name, slug, brand_hex, logo_path")
     .single();
 
   return data;

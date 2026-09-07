@@ -38,6 +38,10 @@ class ReportNotAllowed(RuntimeError):
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GET2_SCORING_PATH = REPO_ROOT / "data" / "instruments" / "get2_scoring.json"
 
+# Where `organisations.logo_path` points. Public-read, unlike `reports` — a
+# school crest is not confidential, and the renderer fetches it with no session.
+BRANDING_BUCKET = "branding"
+
 # supabase-js and supabase-py both cap an unbounded select at 1000 rows by
 # default. The occupation catalogue is 923 today and O*NET grows every release,
 # so a silent truncation here would drop occupations off the end of the
@@ -324,6 +328,7 @@ def load_student_report(client, session_id: str) -> StudentReportInput:
             name=organisation["name"],
             brand_hex=organisation.get("brand_hex"),
             logo_path=organisation.get("logo_path"),
+            logo_url=_logo_url(client, organisation.get("logo_path")),
         ),
         cohort_name=cohort["name"],
         interests=score["interests"] or {},
@@ -354,6 +359,27 @@ def load_student_report(client, session_id: str) -> StudentReportInput:
         engine_version=score["engine_version"],
         template_version=TEMPLATE_VERSION,
     )
+
+
+def _logo_url(client, logo_path: str | None) -> str | None:
+    """A fetchable URL for the school's crest, or None.
+
+    The `branding` bucket is public, unlike `reports`: a school crest is not
+    confidential, and WeasyPrint fetches images over HTTP at render time with no
+    session of its own. A signed URL would work too and would expire mid-render
+    on a slow queue for no benefit.
+
+    Returns None rather than raising on any failure. A missing crest is a cover
+    page without a logo; a raised exception here would fail the whole render and
+    turn a cosmetic gap into a student with no report.
+    """
+    if not logo_path:
+        return None
+    try:
+        return client.storage.from_(BRANDING_BUCKET).get_public_url(logo_path)
+    except Exception:
+        log.warning("could not resolve a public URL for logo %s", logo_path)
+        return None
 
 
 def _report_date(value: str | None) -> str:

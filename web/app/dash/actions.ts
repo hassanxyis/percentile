@@ -99,6 +99,18 @@ export async function renameCohort(
   return { ok: "Renamed." };
 }
 
+/** Logos live here. Public-read, unlike `reports` — a school crest is not
+ *  confidential, and the report renderer fetches it without a session. */
+const BRANDING_BUCKET = "branding";
+
+/** Raster and SVG both render in WeasyPrint. Anything else is a mistake or an
+ *  attempt. */
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
+
+/** A crest, not a photograph. Generous for a logo, small enough that an
+ *  accidental 40 MB upload is refused rather than stored. */
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
 export async function updateOrganisation(
   _state: ActionState,
   formData: FormData,
@@ -112,13 +124,52 @@ export async function updateOrganisation(
     return { error: "The institution needs a name." };
   }
   if (brandHex && !/^#[0-9a-fA-F]{6}$/.test(brandHex)) {
+    // Also validated in `charts.py`, which falls back rather than trusting it —
+    // this value is interpolated into an SVG attribute on every report page.
     return { error: "Brand colour must look like #1C6A61." };
   }
 
   const admin = createAdminClient();
+
+  const logo = formData.get("logo");
+  let logoPath: string | undefined;
+
+  // An empty file input still arrives as a File, with size 0. Treated as "no
+  // logo submitted" rather than as an upload — otherwise saving the name alone
+  // would blank an existing crest.
+  if (logo instanceof File && logo.size > 0) {
+    if (!LOGO_TYPES.includes(logo.type)) {
+      return { error: "The logo must be a PNG, JPEG, WebP or SVG file." };
+    }
+    if (logo.size > LOGO_MAX_BYTES) {
+      return { error: "That logo is larger than 2 MB." };
+    }
+
+    // Keyed on the organisation id, so a re-upload replaces rather than
+    // accumulating, and the path stays stable for the report renderer. The
+    // extension comes from the validated MIME type, never from the filename —
+    // an uploaded name is attacker-controlled and would otherwise decide a
+    // storage key.
+    const extension = logo.type === "image/svg+xml" ? "svg" : logo.type.split("/")[1];
+    const path = `${session.organisationId}/logo.${extension}`;
+
+    const { error: uploadError } = await admin.storage
+      .from(BRANDING_BUCKET)
+      .upload(path, logo, { contentType: logo.type, upsert: true });
+
+    if (uploadError) {
+      return { error: "Could not upload that logo." };
+    }
+    logoPath = path;
+  }
+
   const { error } = await admin
     .from("organisations")
-    .update({ name, ...(brandHex ? { brand_hex: brandHex } : {}) })
+    .update({
+      name,
+      ...(brandHex ? { brand_hex: brandHex } : {}),
+      ...(logoPath ? { logo_path: logoPath } : {}),
+    })
     .eq("id", session.organisationId);
 
   if (error) {
@@ -126,5 +177,5 @@ export async function updateOrganisation(
   }
 
   revalidatePath("/dash/settings");
-  return { ok: "Saved." };
+  return { ok: logoPath ? "Saved, including the new logo." : "Saved." };
 }
