@@ -66,6 +66,19 @@ confirmed session, renders ~13 A4 pages through Jinja2 → WeasyPrint, uploads t
 transaction (`record_student_report`). It fails, correctly, until the interpretation text is
 written.
 
+**Before M9 can run against live data — four things, none of them code:**
+
+1. Apply `db/migrations/0010_student_reports.sql` to Supabase. CI applies every migration to a
+   throwaway Postgres, so a green build says nothing about whether the live database has it.
+   A missing `record_student_report` surfaces as every render job failing five times.
+2. Create a **private** Storage bucket named `reports`.
+3. Set Render's `APP_BASE_URL` to the Vercel URL.
+4. Have a psychologist write `engine/app/content/interpretations.yaml` (45 strings;
+   `python scripts/check_interpretations.py`). Until then every render fails by design.
+
+Set `RESEND_API_KEY` *last*. It is the switch that turns logged mail into delivered mail, and
+until step 4 is done the only thing to deliver is a failure.
+
 **Start here: M10 — the counsellor dashboard.** Roster view with the `pending_review` backlog,
 resend invites, report downloads, branding settings (`plan.md` §17 M10).
 

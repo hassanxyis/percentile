@@ -372,6 +372,48 @@ def test_onet_attribution_uses_the_modified_content_wording():
     assert "trademark of USDOL/ETA" in html
 
 
+def test_the_charts_render_as_markup_rather_than_as_escaped_text():
+    """Autoescape turns an SVG string into `&lt;svg...` visible on the page.
+
+    This shipped once. It passes every content assertion — the words are all
+    there — and produces a report where each chart is replaced by a wall of
+    angle-bracketed source. `{{ ... |safe }}` is what stops it, and this is the
+    test that notices if a future edit drops the filter.
+
+    Caught by rendering the HTML and looking at it, which no other test here
+    did: `test_report_pdf.py` asserted PDF drawing operators, and a page border
+    satisfies those whether or not a chart exists.
+    """
+    html = render_html(build_context(_report(), _written()))
+
+    assert "&lt;svg" not in html, "the chart was escaped instead of rendered"
+    # Two charts on a report with no GET2 page: the interest hexagon and the
+    # personality bars.
+    assert html.count("<svg") == 2
+    assert "<polygon" in html, "the hexagon is missing"
+    assert "<rect" in html, "the personality bars are missing"
+
+
+def test_a_hostile_label_is_still_escaped_inside_the_chart():
+    """`|safe` covers the SVG this project generates, not the values in it.
+
+    The filter is the reason this needs its own assertion: marking the chart
+    safe would be a hole if `charts.py` interpolated a label unescaped.
+    """
+    report = _report(
+        personality={
+            "raw": {"O": 41, "C": 33, "E": 22, "A": 38, "S": 27},
+            "bands": dict.fromkeys("OCEAS", "average"),
+            "labels": {"O": "<script>alert(1)</script>", "C": "C", "E": "E",
+                       "A": "A", "S": "S"},
+        }
+    )
+    html = render_html(build_context(report, _written()))
+
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
+
+
 def test_attribution_is_in_a_running_footer_on_every_page():
     """R6 puts attribution on every report PAGE, not once at the end.
 

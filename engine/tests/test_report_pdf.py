@@ -108,10 +108,35 @@ def test_the_get2_page_is_absent_from_the_rendered_pdf():
 def test_the_charts_survive_into_the_pdf(pdf: bytes):
     """Inline SVG is the one thing here that WeasyPrint could silently drop.
 
-    A PDF that rendered every paragraph and no chart would pass every other
-    test in this suite and be obviously broken to the first person who opened
-    it. Vector drawing operators in the output are the proof it did not.
+    Asserted by SIZE, not by the presence of drawing operators. The first
+    version of this test looked for `re` (a PDF rectangle) and passed while
+    every chart was being escaped into visible `&lt;svg` text — page borders and
+    table rules emit rectangles too, so the check was vacuous.
+
+    A report whose two charts became walls of angle-bracketed source is
+    substantially *bigger* as text and carries far fewer path operators. The
+    honest structural check is that real vector drawing dominates: a document
+    with a hexagon and ten bars has many curve and line operators, and a
+    text-only one has almost none.
     """
-    # `re` and `f` are PDF path-painting operators — present when something was
-    # actually drawn, absent from a text-only document.
-    assert b" re" in pdf or b" c\n" in pdf, "no vector drawing in the PDF — SVG was dropped"
+    curves = pdf.count(b" c\n") + pdf.count(b" c ")
+    lines = pdf.count(b" l\n") + pdf.count(b" l ")
+
+    assert curves + lines > 40, (
+        f"only {curves} curve and {lines} line operators — the charts were "
+        "probably escaped to text rather than drawn"
+    )
+
+
+def test_no_escaped_markup_reaches_the_pdf(pdf: bytes):
+    """The symptom the escaping bug actually produced, checked at the far end.
+
+    If a chart is escaped, the literal string `<svg` is drawn as visible text on
+    the page — which is what a student would open. Fonts make the bytes hard to
+    search directly, so this asserts the size that betrays it: an escaped chart
+    is thousands of characters of source rendered as prose.
+    """
+    assert len(pdf) < 400_000, (
+        f"{len(pdf)} bytes is far larger than a 13-page report should be — "
+        "a chart may be rendering as escaped source text"
+    )

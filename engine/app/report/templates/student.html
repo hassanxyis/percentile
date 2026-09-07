@@ -60,7 +60,11 @@
   <p class="eyebrow">Part one</p>
   <h2>What you said you enjoy</h2>
 
-  <div class="chart">{{ interests.chart }}</div>
+  {# `|safe`: this is SVG markup charts.py generated, not user input. Without it
+     autoescape turns the whole chart into visible `&lt;svg...` text on the page.
+     charts.py escapes the only two values reaching it from outside — the scale
+     labels, and the brand hex, which it validates rather than escapes. #}
+  <div class="chart">{{ interests.chart|safe }}</div>
 
   <p><strong>Your pattern: {{ interests.code|e }}</strong></p>
   <p>{{ interests.band_text|e }}</p>
@@ -87,7 +91,7 @@
   <p class="eyebrow">Part two</p>
   <h2>How you tend to approach things</h2>
 
-  <div class="chart">{{ personality.chart }}</div>
+  <div class="chart">{{ personality.chart|safe }}</div>
 
   <div class="callout">
     <p class="small">{{ personality.provisional_note|e }}</p>
@@ -114,7 +118,7 @@
   <p class="eyebrow">Part three</p>
   <h2>Starting and running things</h2>
 
-  <div class="chart">{{ get2.chart }}</div>
+  <div class="chart">{{ get2.chart|safe }}</div>
 
   <p><strong>{{ get2.band|e }}</strong> — {{ get2.band_text|e }}</p>
 
