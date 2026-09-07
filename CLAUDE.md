@@ -71,7 +71,9 @@ written.
 1. Apply `db/migrations/0010_student_reports.sql` to Supabase. CI applies every migration to a
    throwaway Postgres, so a green build says nothing about whether the live database has it.
    A missing `record_student_report` surfaces as every render job failing five times.
-2. Create a **private** Storage bucket named `reports`.
+2. Create two Storage buckets: **`reports`, private** (a public one makes a guessable URL a
+   minor's profile) and **`branding`, public** (school crests, fetched by the renderer with no
+   session — M10's logo upload writes there).
 3. Set Render's `APP_BASE_URL` to the Vercel URL.
 4. Have a psychologist write `engine/app/content/interpretations.yaml` (45 strings;
    `python scripts/check_interpretations.py`). Until then every render fails by design.
@@ -79,8 +81,12 @@ written.
 Set `RESEND_API_KEY` *last*. It is the switch that turns logged mail into delivered mail, and
 until step 4 is done the only thing to deliver is a failure.
 
-**Start here: M10 — the counsellor dashboard.** Roster view with the `pending_review` backlog,
-resend invites, report downloads, branding settings (`plan.md` §17 M10).
+**M10 is built (`web/app/dash/cohorts/[id]/`, `web/lib/roster.ts`).** Roster progress, the
+five-day backlog banner, resend, report downloads and logo upload.
+
+**Start here: M11 — the cohort report.** Field centroids, congruence, distributions, the
+completion-with-review-backlog table (§10), method page (`plan.md` §17 M11). `render_cohort`
+is the one job kind still in `NOT_YET_IMPLEMENTED`.
 
 ## Read plan.md first
 
@@ -490,6 +496,36 @@ Five things here are load-bearing:
 `Exception` (the import fails with `OSError` from cffi, which `pytest.importorskip` would not
 catch — it would abort collection for the whole suite). CI installs the Pango libraries, so that
 is where "works locally, blank PDF in production" gets caught.
+
+**The charts are injected with `|safe`, and that is load-bearing.** Autoescape turns an SVG
+string into visible `&lt;svg...` source on the page — it shipped once, and passed every content
+assertion because the words were all still there. `charts.py` escapes the values reaching it from
+outside and validates the brand hex rather than escaping it, which is what makes `|safe` correct
+here rather than a hole.
+
+## The counsellor dashboard (`web/app/dash/`)
+
+M10. What a counsellor opens to answer three questions: who has not started, who am I waiting on,
+and whose report can I hand over.
+
+**`app/dash/cohorts/[id]/queries.ts` must never select from `reviews`.** A counsellor has no read
+policy on that table at all — deliberately, because RLS is row-scoped and any policy admitting
+them would expose `interview_notes` (§16). The supported path is
+`review_progress_for_session()`, which returns status and `confirmed_at` and nothing else. The
+failure mode if you forget: a `reviews(...)` embed returns null for a counsellor and the real row
+for an org_admin, so it passes every test run as an admin and silently blanks the column for the
+role that actually uses the screen.
+
+- **The backlog banner is §9.4 from the other side.** A student is never told their report is
+  late; the person who can chase a psychologist is. `web/lib/roster.ts` is pure and tested.
+- **Resend never sees a token.** It enqueues a `send_email` job; the engine mints at send time
+  and stores only the hash. It refuses a submitted student (mirroring `_send_invite`), and the
+  message says *queued*, not sent — `POST /tick` is five minutes away — and warns that the
+  previous link is now dead, because a resend replaces rather than repeats.
+- **Download URLs are minted on click and never rendered into HTML.** Five minutes, against the
+  student's seven days: this one is created on a school computer someone may walk away from.
+- **Status labels are worded, not translated.** `failed` reads "Needs attention" — a job broke,
+  not something the student did — and `needs_more_info` never reads as a rejection (R7).
 
 Two rules constrain what this screen may say. **R3:** nothing pre-fills a note or drafts a
 rationale — the psychologist's clinical voice is theirs. **R4:** no percentiles, so raw scores and

@@ -765,8 +765,8 @@ Roughly twenty hours a week. Twelve milestones, now **~15 weeks / ~300 hours** �
 step or GET2 under schedule pressure. Do not start a milestone before the previous one's test
 passes.
 
-> **Progress: M0–M9 written and tested; M0–M7 LIVE. M10 (counsellor dashboard) is next.**
-> M8 (review portal) and M9 (student report) are built but have not run against live data.
+> **Progress: M0–M10 written and tested; M0–M7 LIVE. M11 (cohort report) is next.**
+> M8, M9 and M10 are built but have not run against live data.
 > M9 additionally waits on the human-written interpretation text described under its milestone
 > below — the code raises rather than shipping a placeholder, so this is a real block, not a
 > polish item. Engine runs as a
@@ -950,9 +950,14 @@ anywhere" in the done-when is now enforced mechanically rather than checked by e
 *Two operational prerequisites before the first real render: a **private** Supabase Storage
 bucket named `reports`, and `APP_BASE_URL` on Render pointing at the Vercel app.*
 
-### M10 — Counsellor dashboard *(week 11, ~14 h)*
+### M10 — Counsellor dashboard *(week 11, ~14 h)* — **DONE (pending a walk-through)**
 Roster view with the new status vocabulary (including `pending_review` backlog visibility),
 resend invites, report downloads, branding settings.
+
+*Built in `web/app/dash/cohorts/[id]/` with the pure logic in `web/lib/roster.ts` (33 tests).
+The roster reads review progress through `review_progress_for_session()` and never touches
+`reviews` — a counsellor has no policy on that table, and §16's boundary is the reason.
+Downloads mint a five-minute signed URL on click rather than rendering one into the page.*
 
 ### M11 — Cohort report *(week 12, ~16 h)*
 Field centroids, congruence, distributions, the completion-with-review-backlog table (§10),
