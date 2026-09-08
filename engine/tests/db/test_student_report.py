@@ -325,11 +325,25 @@ def test_record_student_report_is_not_callable_by_a_logged_in_user(
     session_id = harness.make_session(conn, suffix="9112")
     _confirm(conn, session_id)
 
+    # ORDER IS LOAD-BEARING, and getting it wrong reports the wrong culprit:
+    # `as_user` must be OUTERMOST, so `conn.transaction()` exits first.
+    #
+    # Context managers unwind in reverse. The permission error aborts the
+    # transaction, and `as_user`'s finally-clause runs `reset role` — which
+    # itself fails with InFailedSqlTransaction if the transaction is still
+    # aborted when it runs. With `as_user` outermost, the transaction has
+    # already rolled back to its SAVEPOINT by then and `reset role` succeeds,
+    # so the InsufficientPrivilege this test is asserting is what reaches
+    # `pytest.raises`. Put `as_user` innermost and the test fails claiming a
+    # transaction problem instead of the privilege check it exists to prove.
+    #
+    # `test_record_cohort_report_is_not_callable_by_a_logged_in_user` has the
+    # same shape for the same reason.
     for role in (harness.COUNSELLOR_A, harness.PSYCHOLOGIST_A):
         with (
+            harness.as_user(conn, role),
             pytest.raises(psycopg.errors.InsufficientPrivilege),
             conn.transaction(),
-            harness.as_user(conn, role),
         ):
             conn.execute(
                 "select record_student_report(%s, 'x.pdf', '1.0.0', '1.0.0')",

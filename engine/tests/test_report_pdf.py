@@ -52,7 +52,14 @@ PAGE_MARKER = b"/Type /Page"
 def pdf() -> bytes:
     from app.report.render import render_pdf
 
-    return render_pdf(build_context(_report(), _written()))
+    # `uncompressed_pdf` is the point of this whole file. WeasyPrint compresses
+    # object streams and FlateDecodes content streams by default, which puts
+    # `/Type /Page` and every path operator out of reach of `bytes.count`.
+    # Asking for the uncompressed render keeps the exact Jinja2 → HTML →
+    # WeasyPrint path production uses, and makes the markers searchable.
+    return render_pdf(
+        build_context(_report(), _written()), uncompressed_pdf=True
+    )
 
 
 def test_the_report_renders_to_a_real_pdf(pdf: bytes):
@@ -81,7 +88,9 @@ def test_the_get2_page_is_absent_from_the_rendered_pdf():
     """
     from app.report.render import render_pdf
 
-    without = render_pdf(build_context(_report(), _written()))
+    without = render_pdf(
+        build_context(_report(), _written()), uncompressed_pdf=True
+    )
 
     with_get2 = render_pdf(
         build_context(
@@ -97,7 +106,8 @@ def test_the_get2_page_is_absent_from_the_rendered_pdf():
                 }
             ),
             _written(),
-        )
+        ),
+        uncompressed_pdf=True,
     )
 
     assert with_get2.count(PAGE_MARKER) > without.count(PAGE_MARKER), (
@@ -128,15 +138,80 @@ def test_the_charts_survive_into_the_pdf(pdf: bytes):
     )
 
 
-def test_no_escaped_markup_reaches_the_pdf(pdf: bytes):
+def test_no_escaped_markup_reaches_the_pdf():
     """The symptom the escaping bug actually produced, checked at the far end.
 
     If a chart is escaped, the literal string `<svg` is drawn as visible text on
     the page — which is what a student would open. Fonts make the bytes hard to
     search directly, so this asserts the size that betrays it: an escaped chart
     is thousands of characters of source rendered as prose.
+
+    This renders *compressed*, unlike the other tests. The marker tests need
+    `uncompressed_pdf` to reach raw bytes; this test is about the artefact a
+    student actually downloads, and the escaping bug inflates that far beyond
+    any font/compression difference.
     """
-    assert len(pdf) < 400_000, (
-        f"{len(pdf)} bytes is far larger than a 13-page report should be — "
+    from app.report.render import render_pdf
+
+    stored = render_pdf(build_context(_report(), _written()))
+    assert len(stored) < 400_000, (
+        f"{len(stored)} bytes is far larger than a 13-page report should be — "
         "a chart may be rendering as escaped source text"
+    )
+
+
+# ── the cohort report (M11) ──────────────────────────────────────────────────
+#
+# Same skip guard, same reason: these are the only assertions in the suite that
+# prove the cohort template survives WeasyPrint, and they run in CI alone. A
+# local skip is not a pass.
+
+
+@pytest.fixture(scope="module")
+def cohort_pdf() -> bytes:
+    from app.report.render import COHORT_STYLESHEET, COHORT_TEMPLATE, render_pdf
+    from tests.test_report_cohort import build_cohort_context, report, written
+
+    return render_pdf(
+        build_cohort_context(report(), written()),
+        COHORT_TEMPLATE,
+        COHORT_STYLESHEET,
+        uncompressed_pdf=True,
+    )
+
+
+def test_the_cohort_report_renders_to_a_real_pdf(cohort_pdf: bytes):
+    """The second document through the same pipeline.
+
+    `render_pdf` gained template arguments in M11. This is what proves the
+    cohort stylesheet is found and applied rather than silently falling back to
+    the student one — a failure that would produce a plausible-looking PDF with
+    the wrong page furniture.
+    """
+    assert cohort_pdf.startswith(b"%PDF-"), "output is not a PDF"
+    assert len(cohort_pdf) > 10_000, (
+        f"suspiciously small PDF ({len(cohort_pdf)} bytes) — missing fonts?"
+    )
+
+
+def test_the_cohort_report_is_about_eight_pages(cohort_pdf: bytes):
+    """§14 specifies ~8 pages. A wide band, because content length moves it.
+
+    The failure this catches is structural, exactly as for the student report:
+    one page, because `page-break-after` stopped working, or fifty, because a
+    per-field or per-domain loop ran away. This document has two such loops.
+    """
+    pages = cohort_pdf.count(PAGE_MARKER)
+    assert 5 <= pages <= 16, f"expected roughly 8 pages, got {pages}"
+
+
+def test_the_cohort_charts_survive_into_the_pdf(cohort_pdf: bytes):
+    """The cohort report carries more charts than the student one — a field
+    centroid hexagon per intended field, plus six distribution bar charts."""
+    curves = cohort_pdf.count(b" c\n") + cohort_pdf.count(b" c ")
+    lines = cohort_pdf.count(b" l\n") + cohort_pdf.count(b" l ")
+
+    assert curves + lines > 40, (
+        f"only {curves} curve and {lines} line operators — the charts were "
+        "probably escaped to text rather than drawn"
     )

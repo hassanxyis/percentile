@@ -17,10 +17,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from app.config import TEMPLATE_VERSION
+from app.config import SCORING_ENGINE_VERSION, TEMPLATE_VERSION
+from app.matching import cohort as cohort_analytics
+from app.matching.cohort import Participant as CohortParticipant
 from app.matching.occupations import Occupation
+from app.report.cohort import CohortReportInput
 from app.report.student import Direction, Match, Organisation, StudentReportInput
 from app.scoring.engine import SessionInput
+from app.scoring.flags import warn_count
 from app.scoring.types import Item, ScoringError
 
 log = logging.getLogger(__name__)
@@ -359,6 +363,162 @@ def load_student_report(client, session_id: str) -> StudentReportInput:
         engine_version=score["engine_version"],
         template_version=TEMPLATE_VERSION,
     )
+
+
+def load_cohort_report(client, cohort_id: str) -> CohortReportInput:
+    """Everything the cohort report renders from (plan §10, §14, M11).
+
+    Two deliberate divergences from `load_student_report`, both of which look
+    like mistakes against that function and are not:
+
+    * **`flags` IS selected.** `warn_count()` needs it to apply §7.4's
+      two-or-more-warns exclusion, and the report states how many were excluded
+      and which checks fired. Only the CODES survive into `Participant`; the
+      detail strings are dropped here, at the loader, so no layer above can
+      print "31 identical consecutive answers" beside a name (see
+      `report/cohort.py`'s header for why that boundary sits where it does).
+    * **`full_name` IS selected.** §10 requires "named lists of students to
+      follow up", and a list of participant ids would be useless to the
+      counsellor who has to act on it.
+
+    Scores are read at the LATEST engine version present for each session, for
+    the same reason `load_student_report` does it: a rescore writes a new row
+    beside the old one (R1), and pinning to `SCORING_ENGINE_VERSION` would drop
+    every session scored before the last bump out of the aggregate — silently
+    shrinking the cohort rather than failing.
+
+    Deliberately does NOT load `reviews` at all. No column of that table appears
+    on this document (§16), and the review BACKLOG the completion table reports
+    comes from `participants.status`, which the roster already carries.
+    """
+    cohort = _one(
+        client.table("cohorts")
+        .select("id, name, intake_year, education_level, organisation_id")
+        .eq("id", cohort_id)
+        .execute(),
+        f"no cohort {cohort_id}",
+    )
+    organisation = _one(
+        client.table("organisations")
+        .select("name, brand_hex, logo_path")
+        .eq("id", cohort["organisation_id"])
+        .execute(),
+        f"no organisation for cohort {cohort_id}",
+    )
+
+    participants = _paged(
+        lambda: client.table("participants")
+        .select("id, full_name, intended_field, status")
+        .eq("cohort_id", cohort_id)
+    )
+    if not participants:
+        raise ScoringError(f"cohort {cohort_id} has no participants")
+
+    by_id = {row["id"]: row for row in participants}
+
+    sessions = _paged(
+        lambda: client.table("sessions")
+        .select("id, participant_id")
+        .in_("participant_id", list(by_id))
+    )
+    participant_for_session = {row["id"]: row["participant_id"] for row in sessions}
+
+    scored: list[CohortParticipant] = []
+    if participant_for_session:
+        scored = _cohort_scores(client, participant_for_session, by_id)
+
+    if not scored:
+        # A cohort where nobody has finished is not a small report, it is a
+        # false one. Named rather than rendered as eight pages of zeros.
+        raise ScoringError(
+            f"cohort {cohort_id} has no scored participants — nothing to aggregate"
+        )
+
+    aggregated = cohort_analytics.aggregate(
+        scored, [row["status"] for row in participants]
+    )
+
+    return CohortReportInput(
+        cohort_name=cohort["name"],
+        organisation=Organisation(
+            name=organisation["name"],
+            brand_hex=organisation.get("brand_hex"),
+            logo_path=organisation.get("logo_path"),
+            logo_url=_logo_url(client, organisation.get("logo_path")),
+        ),
+        intake_year=cohort.get("intake_year"),
+        education_level=cohort.get("education_level"),
+        generated_on=_report_date(_now_iso()),
+        aggregate=aggregated,
+        engine_version=SCORING_ENGINE_VERSION,
+        template_version=TEMPLATE_VERSION,
+    )
+
+
+def _cohort_scores(
+    client, participant_for_session: dict[str, str], by_id: dict[str, dict]
+) -> list[CohortParticipant]:
+    """The latest score per session, as the pure `Participant` the aggregate takes.
+
+    Ordered oldest-first and overwritten as later rows arrive, so the last write
+    per session wins — the same "latest engine version" rule
+    `load_student_report` applies with `order(desc).limit(1)`, expressed here for
+    many sessions in one paged query rather than one query per student.
+    """
+    rows = _paged(
+        lambda: client.table("scores")
+        .select("session_id, engine_version, interests, personality, flags, scored_at")
+        .in_("session_id", list(participant_for_session))
+        .order("scored_at")
+    )
+
+    latest: dict[str, dict] = {}
+    for row in rows:
+        latest[row["session_id"]] = row
+
+    scored = []
+    for session_id, score in latest.items():
+        participant = by_id.get(participant_for_session[session_id])
+        if participant is None:
+            continue
+
+        interests = score.get("interests") or {}
+        personality = score.get("personality") or {}
+        flags = score.get("flags") or []
+
+        scored.append(
+            CohortParticipant(
+                participant_id=participant["id"],
+                full_name=participant["full_name"],
+                intended_field=participant.get("intended_field"),
+                status=participant["status"],
+                interests={
+                    scale: int(value)
+                    for scale, value in (interests.get("raw") or {}).items()
+                },
+                band=str(interests.get("band", "")),
+                personality_bands=personality.get("bands") or {},
+                warn_flags=warn_count(flags),
+                # Codes only. The detail strings stop here, at the loader —
+                # R8's boundary for this document (report/cohort.py's header).
+                flag_codes=tuple(
+                    str(flag.get("code", "")) for flag in flags if flag.get("code")
+                ),
+            )
+        )
+    return scored
+
+
+def _now_iso() -> str:
+    """When this report was produced.
+
+    Its own function so a test can monkeypatch it — `_report_date` formats for a
+    reader ("12 March 2026") and the cohort report's cover carries the date it
+    was generated rather than a date any human signed anything on.
+    """
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat()
 
 
 def _logo_url(client, logo_path: str | None) -> str | None:

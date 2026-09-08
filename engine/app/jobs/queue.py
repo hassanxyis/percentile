@@ -138,6 +138,36 @@ def record_student_report(
     return result.data
 
 
+def record_cohort_report(
+    client,
+    cohort_id: str,
+    storage_path: str,
+    template_version: str,
+    engine_version: str,
+) -> str:
+    """Record the rendered cohort report (0011_cohort_reports.sql).
+
+    Two things it deliberately does NOT do, both covered by that migration's
+    header: no R9 check (the trigger fires on `kind = 'student'` only, and a
+    cohort report gated on confirmed reviews would be unavailable to exactly the
+    schools whose review backlog §10's completion table exists to show), and no
+    delivery email (§15 lists no cohort template; the counsellor downloads it).
+
+    Idempotent on (cohort, template_version), so a retried job rewrites its own
+    row rather than accumulating a second one.
+    """
+    result = client.rpc(
+        "record_cohort_report",
+        {
+            "p_cohort_id": cohort_id,
+            "p_storage_path": storage_path,
+            "p_template_version": template_version,
+            "p_engine_version": engine_version,
+        },
+    ).execute()
+    return result.data
+
+
 def record_occupation_matches(
     client, session_id: str, engine_version: str, matches: list[dict]
 ) -> int:

@@ -620,11 +620,20 @@ Unchanged from v1 except one route:
 | `POST` | `/tick` | claim and run up to N pending jobs |
 | `POST` | `/score/{session_id}` | force-score one session (admin/debug) |
 | `POST` | `/render/student/{session_id}` | **only succeeds if `reviews.status = 'confirmed'` (R9); returns 409 otherwise** |
-| `POST` | `/render/cohort/{cohort_id}` | build the cohort report |
+| `POST` | `/render/cohort/{cohort_id}` | **deferred at M11 — not built.** See below |
 | `POST` | `/norms/recompute` | recompute norm tables for a population |
 | `GET` | `/version` | engine + template + instrument versions |
 
 Every route still requires `X-Engine-Key`; the engine is never called from a browser.
+
+**`/render/cohort/{cohort_id}` was deliberately not built in M11.** The cohort report is
+triggered by inserting a `render_cohort` job row, matching every other engine operation and
+§2's rule that the engine is never called synchronously from a user request — a render on a
+cold free-tier host is a minute long, which is a queued job rather than an HTTP request an
+impatient counsellor reloads. Building the route would add a second trigger mechanism with its
+own auth surface for no behaviour the queue does not already provide. `web/` therefore makes
+no HTTP call to the engine at all. Add it if something ever needs a synchronous answer;
+nothing does today.
 
 ---
 
@@ -765,8 +774,11 @@ Roughly twenty hours a week. Twelve milestones, now **~15 weeks / ~300 hours** �
 step or GET2 under schedule pressure. Do not start a milestone before the previous one's test
 passes.
 
-> **Progress: M0–M10 written and tested; M0–M7 LIVE. M11 (cohort report) is next.**
-> M8, M9 and M10 are built but have not run against live data.
+> **Progress: M0–M11 written and tested; M0–M7 LIVE. M12 (the pilot) is next.**
+> M8, M9, M10 and M11 are built but have not run against live data.
+> M11 renders end-to-end — its text ships written — but nothing enqueues its job yet:
+> the counsellor-facing trigger and download link are a follow-up pass, and until then a
+> `render_cohort` row is inserted by hand.
 > M9 additionally waits on the human-written interpretation text described under its milestone
 > below — the code raises rather than shipping a placeholder, so this is a real block, not a
 > polish item. Engine runs as a
@@ -787,9 +799,13 @@ passes.
 > **Operational notes for whoever deploys/changes anything:** Set Render's `APP_BASE_URL` to the
 > Vercel URL before any real email — invite and report links are built from it. Create a
 > **private** Supabase Storage bucket named `reports` before the first render; public would make
-> a guessable URL a minor's full profile. `RESEND_API_KEY` is unset on purpose (`LoggingEmailer`
+> a guessable URL a minor's full profile. Both report kinds write there. Apply
+> `0010_student_reports.sql` and `0011_cohort_reports.sql` to Supabase — CI proves nothing
+> about the live database, and a missing function surfaces as every render job failing five
+> times. `RESEND_API_KEY` is unset on purpose (`LoggingEmailer`
 > drains with `NOT SENT`); turning it on now would start delivering real mail, and M9 still
-> refuses to render until the interpretation text is written. `load_onet.py`
+> refuses to render a student report until the interpretation text is written — M11's cohort
+> report does not wait on that, but nothing enqueues its job yet. `load_onet.py`
 > writes one complete-row upsert now — the earlier two-partial-upsert shape could not run
 > against Supabase/PostgREST (commit `6155e36`). A phantom tick once reported work this
 > project's queue never did; check there is only one Render service before debugging a
@@ -959,9 +975,43 @@ The roster reads review progress through `review_progress_for_session()` and nev
 `reviews` — a counsellor has no policy on that table, and §16's boundary is the reason.
 Downloads mint a five-minute signed URL on click rather than rendering one into the page.*
 
-### M11 — Cohort report *(week 12, ~16 h)*
+### M11 — Cohort report *(week 12, ~16 h)* — **BUILT (renders end-to-end)**
 Field centroids, congruence, distributions, the completion-with-review-backlog table (§10),
 method page.
+
+*Built in `engine/app/matching/cohort.py` (the arithmetic, pure),
+`engine/app/report/cohort.py` + `templates/cohort.html` (the document, pure) and
+`engine/app/jobs/handlers/render_cohort.py`, with `record_cohort_report()` in
+`db/migrations/0011_cohort_reports.sql`. `render_cohort` leaves `NOT_YET_IMPLEMENTED`,
+leaving only `recompute_norms` (M13).*
+
+*Unlike M9 this renders today. Its text is page furniture, method description and threshold
+explanation written to an institution about a group — not clinical judgement about a person —
+so it ships written under `report.cohort.*` rather than empty. Nothing here waits on a
+psychologist.*
+
+Four things were decided rather than inherited:
+
+- **Congruence is leave-one-out.** A student is compared against the centroid of the *others*
+  heading into their intended field. A self-inclusive centroid is circular, and at n=1 it
+  returns exactly 1.0 — the report would announce perfect alignment for a field containing one
+  student, which is the manufactured finding §9 exists to prevent. A group of one gets no
+  congruence figure and says why.
+- **§9's rule is enforced by withholding the number.** `describe_rate` produces no percentage
+  below a denominator of ten, so the template cannot print one; it formats no percentages at
+  all. A pilot field group is routinely two or three students.
+- **The aggregate population is every scored participant minus those with 2+ `warn` flags**
+  (§7.4), with the excluded count and the codes that fired stated in the report. Names are not:
+  §7.4 asks how many and why, not who, and a name beside a response-quality code is a judgement
+  about a minor in a document a school files. R9 does not gate this document at all — the
+  trigger reads `NEW.kind = 'student'`.
+- **No trigger UI, deliberately.** See §11.
+
+**Done when:** a `render_cohort` job produces a branded ~8-page PDF stating a congruence rate
+you can recompute by hand. *The arithmetic and the document are asserted in
+`test_cohort_aggregation.py` and `test_report_cohort.py`; the PDF itself is proved only by CI,
+which has the Pango libraries. What remains is the button — nothing enqueues the job yet, so
+today it is inserted by hand.*
 
 ### M12 — Pilot, sized to the psychologist bottleneck *(week 13, ~10 h + the pilot itself)*
 **Cap the pilot cohort at 15–25 students** (§9.3), matched to how many reviews you (or your

@@ -240,6 +240,152 @@ report:
   # Footer on every page, beside the organisation's name.
   confidential: "Private — for the named student and their counsellor."
 
+  # ───────────────────────────────────────────────────────────────────────────
+  # THE COHORT REPORT (§10, §14, M11)
+  #
+  # Nested under `report:` deliberately, and not as a top-level `cohort:` block.
+  # Everything here is page furniture, method description and threshold
+  # explanation for a document written to an INSTITUTION — it describes what was
+  # measured and how, and says nothing about any individual. That is why it ships
+  # written while the interpretive blocks above ship empty (R3).
+  #
+  # Two tests hold that line: `test_structural_and_attribution_text_is_written`
+  # requires every `report.*` key to be non-blank, and
+  # `test_the_shipped_interpretations_file_is_unwritten` requires the interpretive
+  # remainder to stay blank. A top-level `cohort:` block would land on the wrong
+  # side of both.
+  #
+  # §9's statistical honesty rules constrain every string below: never a
+  # percentage on a denominator under 10 (the engine withholds it — see
+  # `describe_rate`), never a cohort comparison without both n's, and never
+  # "in the wrong field" where "classed misaligned by this instrument" is meant.
+  cohort:
+    title: "Cohort profile"
+    subtitle: "What this group's answers show, and what they do not"
+
+    how_to_read:
+      title: "How to read this report"
+      body: >-
+        This report describes what one group of students told us about the
+        activities they enjoy and how they tend to approach things. It is a
+        picture of a set of questionnaire answers, not a measure of ability,
+        potential or the quality of any teaching. Nothing in it is a diagnosis or
+        a health assessment, and no individual student's results are reproduced
+        here beyond the follow-up list on the last page.
+        The most useful thing to do with it is to treat the patterns as questions
+        worth asking, rather than as findings to act on directly.
+      limits: >-
+        Three limits worth knowing before reading on. The scores behind these
+        figures are compared against provisional bands rather than against other
+        Pakistani students, because there is not yet a large enough local sample
+        to do that honestly. Where a group is smaller than ten students, this
+        report gives you the count and the total and deliberately withholds a
+        percentage, because a percentage of six people invites more confidence
+        than six people can support. And a questionnaire only knows what students
+        told it on one day.
+
+    completion:
+      title: "Who has completed what"
+      body: >-
+        Every student on the roster appears in this table, including those who
+        have not started. The review column is shown separately from completion
+        on purpose: a report that is waiting for a counsellor to review it is not
+        the same as one a student has not begun, and only one of those is
+        something the institution can chase.
+      backlog_note: >-
+        Students shown as awaiting review have finished the questionnaire and are
+        waiting for a counsellor to go through their results. They have not been
+        told that anything is late, and they will not be.
+
+    excluded:
+      title: "Students not included in these figures"
+      body: >-
+        Some questionnaires show response patterns that make the scores
+        unreliable — the same answer repeated many times in a row, or an
+        assessment completed faster than the questions can be read. Where two or
+        more such patterns appear together, that student's results are left out of
+        the figures in this report so they do not distort the group's picture.
+        The students concerned are not named here, and their own reports are
+        unaffected. This is a note about data quality, not about any individual,
+        and the counsellor who administered the assessment is usually the person
+        best placed to know why a questionnaire was rushed.
+      none: >-
+        No student's responses showed a pattern serious enough to leave them out
+        of these figures.
+
+    interests:
+      title: "What this group is drawn to"
+      body: >-
+        Each student's strongest interest area, counted once. This is the first
+        letter of their three-letter profile, so the totals below add up to the
+        number of students included rather than to three times that number.
+        A concentration in one or two areas is common in a class that shares a
+        subject stream, and is not in itself a finding.
+
+    personality:
+      title: "How this group tends to work"
+      body: >-
+        The five areas below describe working style, not ability, and there is no
+        good or bad end to any of them. Bands are provisional: they come from the
+        published response ranges rather than from a comparison against other
+        Pakistani students, which awaits a larger local sample.
+
+    congruence:
+      title: "Interests and intended fields"
+      body: >-
+        For each field students said they intend to enter, this compares a
+        student's interest profile against the profile of the others heading into
+        the same field. It answers one narrow question — do students choosing this
+        field resemble each other — and nothing more. It is not a judgement about
+        whether any student has chosen well, and a student classed as differing
+        from their group may have excellent reasons that a questionnaire cannot
+        see.
+      method: >-
+        Each student is compared against the average profile of the others
+        heading into their field, with that student's own answers left out of the
+        average. Leaving them out matters: a student who is part of the average
+        they are measured against is partly being compared with themselves, and in
+        a field chosen by only one student that comparison has no meaning at all.
+        Those students are shown as "too few to compare" rather than being given a
+        flattering score.
+      thresholds: >-
+        Three classes are used, on a scale from 0 to 1: aligned at 0.60 and above,
+        partly aligned between 0.35 and 0.60, and differing below 0.35. These
+        thresholds are provisional. They were chosen before local data existed and
+        should be revisited once enough Pakistani students have completed the
+        assessment to know where the real boundaries fall.
+      too_few: >-
+        Fields chosen by a single student are listed with their profile but
+        without a comparison, because there is no one to compare them against.
+
+    follow_up:
+      title: "Students worth a conversation"
+      body: >-
+        These students are named because a conversation is the appropriate next
+        step, not because anything is wrong. Two situations bring a student onto
+        this list: their answers did not produce a clear interest profile, in
+        which case exploring is more useful than recommending; or their interests
+        differ from others heading into the same field, which is worth
+        understanding rather than correcting.
+      none: >-
+        No student in this cohort met either condition for a follow-up
+        conversation.
+
+    method:
+      title: "Method and attribution"
+      body: >-
+        Interests were measured with the O*NET Interest Profiler Short Form and
+        personality with the International Personality Item Pool Big-Five factor
+        markers. Interest profiles are compared using cosine similarity after each
+        profile is centred on its own mean, which compares the shape of a profile
+        rather than how many boxes a student ticked overall.
+        Every individual student report is read by a counsellor before it is
+        released. The figures in this report are machine-produced and have not
+        been individually reviewed, which is why they describe patterns rather
+        than people.
+
+    confidential: "Private — for the named institution and its counselling staff."
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ATTRIBUTION — licence text, quoted verbatim (R6)
 # ─────────────────────────────────────────────────────────────────────────────

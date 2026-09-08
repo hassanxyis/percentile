@@ -1,0 +1,284 @@
+{#
+  Cohort report — ~8 pages (plan §10, §14).
+
+  The institution's copy. Every interpretive string comes from
+  `interpretations.yaml` via `build_cohort_context`; there is no prose in this
+  file describing what a pattern means.
+
+  Three absences are deliberate and must stay:
+    * NO flag detail strings. `CohortParticipant` has no field for one
+      (cohort.py's header) — the excluded page carries codes and counts.
+    * NO interview notes and no reviewer name (§16).
+    * NO individual scores. A student appears by name on exactly one page, the
+      follow-up list, with a reason that is a result rather than a judgement.
+
+  NO PERCENTAGE IS FORMATTED IN THIS FILE. Every proportion is printed as
+  `{{ x.text }}`, built by `_rate`, which withholds the percentage entirely
+  below a denominator of ten (§9). A `{{ n }}%` written here would walk straight
+  around that rule — which is why the number is not in the context to print.
+
+  `|e` on every interpolation. The organisation name, the cohort name and — on
+  the follow-up page — students' names are all human-typed and reach this
+  template from a roster CSV.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ cohort_name|e }} — {{ organisation.name|e }}</title>
+  <style>{{ stylesheet }}</style>
+</head>
+<body>
+
+{# Sets the running-footer string for every page (R6). #}
+<div class="attribution-anchor">{{ attribution.short|e }}</div>
+
+{# ── 1. Cover ─────────────────────────────────────────────────────────── #}
+<section class="page cover">
+  {% if organisation.logo_url %}
+    <img class="cover-logo" src="{{ organisation.logo_url|e }}"
+         alt="{{ organisation.name|e }}">
+  {% endif %}
+  <div class="cover-rule" style="background: {{ brand|e }}"></div>
+  <p class="eyebrow">{{ organisation.name|e }}</p>
+  <h1>{{ title|e }}</h1>
+  <p class="muted">{{ subtitle|e }}</p>
+
+  <p class="cohort">{{ cohort_name|e }}</p>
+  <p class="muted small">
+    {% if education_level %}{{ education_level|e }}{% endif %}
+    {% if intake_year %} · {{ intake_year }}{% endif %}
+    · {{ counts.total }} students · prepared {{ generated_on|e }}
+  </p>
+
+  <div class="cover-foot">
+    <p>{{ confidential|e }}</p>
+    <p>{{ attribution.short|e }}</p>
+  </div>
+</section>
+
+{# ── 2. How to read this report ───────────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">Before you start</p>
+  <h2>{{ how_to_read.title|e }}</h2>
+  <p>{{ how_to_read.body|e }}</p>
+  <div class="callout">
+    <p>{{ how_to_read.limits|e }}</p>
+  </div>
+
+  <div class="figures">
+    <div class="figure">
+      <p class="figure-number">{{ counts.total }}</p>
+      <p class="figure-label">students on the roster</p>
+    </div>
+    <div class="figure">
+      <p class="figure-number">{{ counts.scored }}</p>
+      <p class="figure-label">have completed the questionnaire</p>
+    </div>
+    <div class="figure">
+      <p class="figure-number">{{ counts.included }}</p>
+      <p class="figure-label">included in the figures that follow</p>
+    </div>
+  </div>
+</section>
+
+{# ── 3. Completion, with the review backlog as its own number (§10) ───── #}
+<section class="page">
+  <p class="eyebrow">Where the cohort is</p>
+  <h2>{{ completion.title|e }}</h2>
+  <p>{{ completion.body|e }}</p>
+
+  <table>
+    <thead>
+      <tr><th>Stage</th><th class="numeric">Students</th></tr>
+    </thead>
+    <tbody>
+      {% for row in completion.rows %}
+        <tr>
+          <td>{{ row.label|e }}</td>
+          <td class="numeric">{{ row.rate.text|e }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <p>{{ completion.backlog_note|e }}</p>
+  </div>
+</section>
+
+{# ── 4. Who is not in the figures (§7.4) ──────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">Before the figures</p>
+  <h2>{{ excluded.title|e }}</h2>
+
+  {% if excluded.count %}
+    <p>{{ excluded.body|e }}</p>
+    <p><strong>{{ excluded.rate.text|e }}</strong> of the completed questionnaires
+      are not counted in this report.</p>
+
+    <table>
+      <thead>
+        <tr><th>Check raised</th><th class="numeric">Times</th></tr>
+      </thead>
+      <tbody>
+        {% for entry in excluded.by_code %}
+          <tr>
+            <td>{{ entry.code|e }}</td>
+            <td class="numeric">{{ entry.count }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>{{ excluded.none|e }}</p>
+  {% endif %}
+</section>
+
+{# ── 5. Interests ─────────────────────────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">What this group is drawn to</p>
+  <h2>{{ interests.title|e }}</h2>
+  <p>{{ interests.body|e }}</p>
+
+  {# `|safe`: SVG this package generated. charts.py escapes the labels reaching
+     it from outside and validates the brand hex rather than escaping it. #}
+  <div class="chart">{{ interests.chart|safe }}</div>
+
+  <table>
+    <thead>
+      <tr><th>Strongest area</th><th class="numeric">Students</th></tr>
+    </thead>
+    <tbody>
+      {% for letter in interests.letters %}
+        <tr>
+          <td>{{ letter.letter|e }}</td>
+          <td class="numeric">{{ letter.rate.text|e }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{# ── 6. Personality ───────────────────────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">How this group tends to work</p>
+  <h2>{{ personality.title|e }}</h2>
+  <p>{{ personality.body|e }}</p>
+
+  {% for domain in personality.domains %}
+    <div class="domain">
+      <h3>{{ domain.label|e }}</h3>
+      <div class="chart">{{ domain.chart|safe }}</div>
+    </div>
+  {% endfor %}
+</section>
+
+{# ── 7. Interests against intended fields (§10) ───────────────────────── #}
+<section class="page">
+  <p class="eyebrow">Interests and intentions</p>
+  <h2>{{ congruence.title|e }}</h2>
+  <p>{{ congruence.body|e }}</p>
+
+  {% if congruence.denominator %}
+    <table>
+      <thead>
+        <tr>
+          <th>How closely students match their field</th>
+          <th class="numeric">Students</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Aligned</td><td class="numeric">{{ congruence.totals.aligned.text|e }}</td></tr>
+        <tr><td>Partly aligned</td><td class="numeric">{{ congruence.totals.partial.text|e }}</td></tr>
+        <tr><td>Differing</td><td class="numeric">{{ congruence.totals.misaligned.text|e }}</td></tr>
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">{{ congruence.too_few|e }}</p>
+  {% endif %}
+
+  <div class="callout">
+    <p class="small">{{ congruence.thresholds|e }}</p>
+  </div>
+</section>
+
+{# ── 8. Field by field ────────────────────────────────────────────────── #}
+{% if congruence.fields %}
+<section class="page">
+  <p class="eyebrow">Interests and intentions</p>
+  <h2>Field by field</h2>
+
+  {% for field in congruence.fields %}
+    <div class="field">
+      <h3>{{ field.field|e }} <span class="band">— {{ field.n }} student{{ "" if field.n == 1 else "s" }}</span></h3>
+      <div class="chart chart-small">{{ field.chart|safe }}</div>
+      {% if field.comparable %}
+        <p class="small">Aligned: {{ field.aligned_rate.text|e }}.
+          Partly aligned: {{ field.partial }}. Differing: {{ field.misaligned }}.
+          {% if field.uncomputable %}
+            No clear profile to compare: {{ field.uncomputable }}.
+          {% endif %}
+        </p>
+      {% else %}
+        <p class="small muted">{{ congruence.too_few|e }}</p>
+      {% endif %}
+    </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# ── 9. Students worth a conversation (§10's named list) ──────────────── #}
+<section class="page">
+  <p class="eyebrow">Next steps</p>
+  <h2>{{ follow_up.title|e }}</h2>
+  <p>{{ follow_up.body|e }}</p>
+
+  {% if follow_up.students %}
+    <table>
+      <thead>
+        <tr><th>Student</th><th>Intended field</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        {% for student in follow_up.students %}
+          <tr>
+            <td>{{ student.full_name|e }}</td>
+            <td>{{ (student.intended_field or "—")|e }}</td>
+            <td class="reason">{{ student.reason|e }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">{{ follow_up.none|e }}</p>
+  {% endif %}
+</section>
+
+{# ── 10. Method and attribution (R6) ──────────────────────────────────── #}
+<section class="page">
+  <p class="eyebrow">For the record</p>
+  <h2>{{ method.title|e }}</h2>
+  <p>{{ method.body|e }}</p>
+
+  <h3>How students were compared with their intended field</h3>
+  <p>{{ congruence.method|e }}</p>
+  {# The thresholds are printed from the same constants `congruence_class`
+     branches on, so the rule a reader is shown cannot drift from the rule that
+     was applied (§10 requires them on this page). #}
+  <p class="small">Aligned: {{ congruence.aligned_min }} and above.
+    Partly aligned: {{ congruence.partial_min }} to {{ congruence.aligned_min }}.
+    Differing: below {{ congruence.partial_min }}.</p>
+
+  <h3>Attribution</h3>
+  <p class="attribution">{{ attribution.onet|e }}
+    <a href="{{ attribution.onet_licence_url|e }}">{{ attribution.onet_licence_url|e }}</a></p>
+  <p class="attribution">{{ attribution.ipip|e }}</p>
+
+  <p class="attribution small">
+    Report {{ versions.template|e }} · scoring {{ versions.engine|e }} ·
+    {{ confidential|e }}
+  </p>
+</section>
+
+</body>
+</html>

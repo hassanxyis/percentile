@@ -162,15 +162,16 @@ def test_unknown_kind_fails_the_job_rather_than_stranding_it(fake_queue, monkeyp
     """Retrying cannot help, but a job left `running` sits forever. Failing it
     normally means it exhausts its attempts and alerts.
 
-    `render_cohort` stands in for the shape now that M9 implemented
-    `render_student` — M11 is the milestone that will take this one off the list.
+    `recompute_norms` stands in for the shape. It is the last kind on the
+    unimplemented list — M9 took `render_student` off it and M11 took
+    `render_cohort` — so M13 is the milestone that will need a new stand-in here.
     """
-    fake_queue.batches = [[job(kind="render_cohort")], []]
+    fake_queue.batches = [[job(kind="recompute_norms")], []]
     monkeypatch.setattr(runner, "handler_for", handler_for)
 
     runner.run_tick(object(), SETTINGS)
 
-    assert "M11" in fake_queue.failed[0][1]
+    assert "M13" in fake_queue.failed[0][1]
 
 
 # ── the phases that must not be able to abort a tick ─────────────────────────
@@ -256,6 +257,9 @@ def test_zero_deadline_means_no_limit(fake_queue, monkeypatch):
         # M9. Enqueued by `save_review()` since M8, so it was the one kind the
         # system queued and could not run; that gap is what M9 closed.
         "render_student",
+        # M11. Enqueued by the counsellor dashboard writing a `jobs` row, the
+        # same way `resendInvite` enqueues `send_email`.
+        "render_cohort",
     ],
 )
 def test_every_queued_kind_has_a_handler(kind):
@@ -265,13 +269,11 @@ def test_every_queued_kind_has_a_handler(kind):
     assert callable(handler_for(kind))
 
 
-@pytest.mark.parametrize(
-    ("kind", "milestone"),
-    [("render_cohort", "M11"), ("recompute_norms", "M13")],
-)
+@pytest.mark.parametrize(("kind", "milestone"), [("recompute_norms", "M13")])
 def test_unimplemented_kinds_name_their_milestone(kind, milestone):
     """Nothing enqueues these yet, so the alert naming the milestone is the
-    right failure. `render_student` left this list in M9."""
+    right failure. `render_student` left this list in M9, `render_cohort` in
+    M11 — leaving `recompute_norms` as the last one."""
     with pytest.raises(UnknownJobKind, match=milestone):
         handler_for(kind)
 

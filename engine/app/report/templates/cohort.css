@@ -1,0 +1,234 @@
+/* Cohort report — A4, 18mm margins (plan §10, §14).
+ *
+ * A separate stylesheet from `student.css` rather than a shared one. The two
+ * documents diverge in ways that would make one file a pile of conditionals:
+ * this one has no full-bleed cover portrait, no `.direction` cards, no
+ * questions list, and it needs table and figure rules the student report has no
+ * use for. Sharing would also mean a cohort layout change could reflow a
+ * shipped student report — and both stamp the same `TEMPLATE_VERSION`, so that
+ * reflow would be invisible until someone opened a PDF.
+ *
+ * The ~40 duplicated lines of typography and page furniture are the price, and
+ * they are cheaper than that coupling.
+ *
+ * Same WeasyPrint constraints as the student report: no flexbox gap, no web
+ * fonts. DejaVu is bundled in the image (`fonts-dejavu-core`) and in CI, named
+ * first so both environments render the same metrics.
+ */
+
+@page {
+  size: A4;
+  margin: 18mm;
+
+  /* R6: attribution on every page, as a licence term — in the running footer so
+   * no page break and no template edit can drop it from one page while leaving
+   * it on the others. */
+  @bottom-left {
+    content: string(attribution-short);
+    font-family: "DejaVu Sans", sans-serif;
+    font-size: 6.5pt;
+    color: #7A8380;
+  }
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-family: "DejaVu Sans", sans-serif;
+    font-size: 7.5pt;
+    color: #7A8380;
+  }
+}
+
+@page :first {
+  @bottom-left { content: ""; }
+  @bottom-right { content: ""; }
+}
+
+html {
+  font-family: "DejaVu Sans", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: #1F2421;
+}
+
+body { margin: 0; }
+
+.attribution-anchor {
+  string-set: attribution-short content();
+  position: absolute;
+  visibility: hidden;
+  height: 0;
+}
+
+.page {
+  page-break-after: always;
+}
+.page:last-child {
+  page-break-after: auto;
+}
+
+h1, h2, h3 {
+  page-break-after: avoid;
+  margin: 0 0 8px;
+  line-height: 1.25;
+}
+p {
+  orphans: 2;
+  widows: 2;
+  margin: 0 0 10px;
+}
+
+h1 { font-size: 22pt; font-weight: 700; }
+h2 { font-size: 15pt; font-weight: 700; }
+h3 { font-size: 11.5pt; font-weight: 600; }
+
+.muted { color: #5C6663; }
+.small { font-size: 8.5pt; }
+
+/* ── cover ──────────────────────────────────────────────────────────────── */
+.cover {
+  height: 245mm;
+}
+.cover-logo {
+  max-height: 22mm;
+  max-width: 60mm;
+  object-fit: contain;
+  margin: 0 0 20px;
+}
+.cover-rule {
+  height: 6px;
+  width: 64px;
+  margin: 0 0 26px;
+}
+.cover h1 {
+  font-size: 28pt;
+  margin-bottom: 4px;
+}
+.cover .cohort {
+  font-size: 16pt;
+  margin: 30px 0 2px;
+}
+.cover-foot {
+  position: absolute;
+  bottom: 0;
+  font-size: 8pt;
+  color: #7A8380;
+}
+
+/* ── section furniture ──────────────────────────────────────────────────── */
+.eyebrow {
+  font-size: 8pt;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #7A8380;
+  margin: 0 0 6px;
+}
+
+.callout {
+  border-left: 3px solid #D6D9D8;
+  padding: 2px 0 2px 14px;
+  margin: 14px 0;
+}
+
+.chart {
+  margin: 12px 0 16px;
+}
+.chart svg {
+  max-width: 100%;
+}
+/* A field centroid sits beside its counts rather than dominating the page —
+ * there is one per intended field and a full-size hexagon each would push the
+ * section over several pages. */
+.chart-small svg {
+  max-width: 46%;
+}
+
+/* ── headline figures on the "how to read" page ─────────────────────────── */
+/* Table-based rather than flex: WeasyPrint's flex support is partial and `gap`
+ * silently does nothing, which produces three figures jammed together. */
+.figures {
+  display: table;
+  width: 100%;
+  margin: 22px 0 0;
+  border-spacing: 12px 0;
+}
+.figure {
+  display: table-cell;
+  width: 33%;
+  border: 1px solid #D6D9D8;
+  border-radius: 6px;
+  padding: 14px 16px;
+  vertical-align: top;
+}
+.figure-number {
+  font-size: 24pt;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.1;
+}
+.figure-label {
+  font-size: 8.5pt;
+  color: #5C6663;
+  margin: 4px 0 0;
+}
+
+/* ── tables ─────────────────────────────────────────────────────────────── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 18px;
+}
+th {
+  text-align: left;
+  font-size: 8pt;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7A8380;
+  border-bottom: 1px solid #D6D9D8;
+  padding: 0 8px 5px 0;
+  font-weight: 600;
+}
+td {
+  padding: 7px 8px 7px 0;
+  border-bottom: 1px solid #ECEEED;
+  vertical-align: top;
+  font-size: 9.5pt;
+}
+tr {
+  page-break-inside: avoid;
+}
+/* Counts right-aligned so a column of "12 of 20 (60%)" reads down the page.
+ * Never a bare percentage — `_rate` withholds one below n=10 and the template
+ * prints the string it was given. */
+.numeric {
+  text-align: right;
+  white-space: nowrap;
+}
+.reason {
+  color: #5C6663;
+  font-size: 9pt;
+}
+
+/* ── per-domain and per-field blocks ────────────────────────────────────── */
+.domain,
+.field {
+  margin: 0 0 16px;
+  page-break-inside: avoid;
+}
+.domain h3,
+.field h3 {
+  margin-bottom: 2px;
+}
+.field .band {
+  font-size: 8.5pt;
+  color: #7A8380;
+  font-weight: 400;
+}
+
+/* ── method page ────────────────────────────────────────────────────────── */
+.attribution {
+  font-size: 8.5pt;
+  color: #5C6663;
+  margin: 6px 0;
+}
+.attribution a {
+  color: #5C6663;
+}

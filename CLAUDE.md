@@ -4,16 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Where the build is
 
-**M0–M9 are written and tested; M0–M7 are LIVE. The engine is on Render; the web app is on
-Vercel. M10 (the counsellor dashboard) is next.** `plan.md` §17 carries the detail;
-the short version:
+**M0–M11 are written and tested; M0–M7 are LIVE. The engine is on Render; the web app is on
+Vercel. M12 (the pilot) is next.** `plan.md` §17 carries the detail; the short version:
 
-> **M9 renders, but cannot yet produce a releasable report, and that is by design.**
+> **M9 renders, but cannot yet produce a releasable STUDENT report, and that is by design.**
 > `engine/app/content/interpretations.yaml` ships with all 45 interpretive strings EMPTY —
 > R3 says a person with psychology training writes them, and the loader raises
 > `InterpretationMissing` rather than defaulting. A `render_student` job therefore fails
 > until they are written. Run `python scripts/check_interpretations.py` for the worklist.
 > Do not fill that file in. `test_report_student.py` has a test that fails if you do.
+>
+> **M11's cohort report is not blocked by that**, and the distinction is the point: its
+> strings are page furniture and method description written to an institution about a group,
+> not clinical judgement about a person, so they ship written under `report.cohort.*`. The
+> worklist script excludes them. What M11 lacks is a button — nothing enqueues a
+> `render_cohort` job yet.
 
 A counsellor can sign in, create a cohort and upload a roster CSV. A student can open their invite
 link, consent, answer both modules on a phone, close the tab mid-way, come back and resume where
@@ -68,7 +73,8 @@ written.
 
 **Before M9 can run against live data — four things, none of them code:**
 
-1. Apply `db/migrations/0010_student_reports.sql` to Supabase. CI applies every migration to a
+1. Apply `db/migrations/0010_student_reports.sql` **and `0011_cohort_reports.sql`** to
+   Supabase. CI applies every migration to a
    throwaway Postgres, so a green build says nothing about whether the live database has it.
    A missing `record_student_report` surfaces as every render job failing five times.
 2. Create two Storage buckets: **`reports`, private** (a public one makes a guessable URL a
@@ -81,12 +87,24 @@ written.
 Set `RESEND_API_KEY` *last*. It is the switch that turns logged mail into delivered mail, and
 until step 4 is done the only thing to deliver is a failure.
 
+Steps 1 and 2 also gate M11: the cohort report writes through `record_cohort_report` into the
+same private `reports` bucket. Step 4 does not — its text ships written.
+
 **M10 is built (`web/app/dash/cohorts/[id]/`, `web/lib/roster.ts`).** Roster progress, the
 five-day backlog banner, resend, report downloads and logo upload.
 
-**Start here: M11 — the cohort report.** Field centroids, congruence, distributions, the
-completion-with-review-backlog table (§10), method page (`plan.md` §17 M11). `render_cohort`
-is the one job kind still in `NOT_YET_IMPLEMENTED`.
+**M11 is built (`engine/app/matching/cohort.py`, `engine/app/report/cohort.py`,
+`db/migrations/0011_cohort_reports.sql`).** Field centroids, congruence, distributions, the
+completion-with-review-backlog table and the named follow-up list. **Unlike M9 it renders
+end-to-end today** — its text is page furniture rather than clinical judgement, so it ships
+written. `recompute_norms` (M13) is now the only kind left in `NOT_YET_IMPLEMENTED`.
+
+**What M11 did not build: the button.** Nothing enqueues a `render_cohort` job yet. There is
+no `/dash/cohorts/[id]/report` page and no download link on the roster, so the only way to
+produce one today is to insert a `jobs` row by hand. That is the next pass.
+
+**Start here: M12 — the pilot**, sized to 15–25 students (§9.3), plus `rescore_all.py`
+(R1, `plan.md` §17 M12). The cohort report's trigger UI is the smaller job to clear first.
 
 ## Read plan.md first
 
@@ -197,8 +215,12 @@ Supabase project from pausing, and turns a failed job into a retry rather than a
 submission. Do not "optimise" it into a direct call — report generation taking a minute is a
 feature of the design (`plan.md` §2, §11).
 
-The only web-to-engine calls are `POST /render/cohort/{id}` and `GET /version`, both from
-server-side code. Everything else flows through the `jobs` table.
+**Nothing in `web/` calls the engine over HTTP.** `plan.md` §11 lists
+`POST /render/cohort/{cohort_id}`; M11 deliberately did not build it. A cohort report is
+requested by inserting a `render_cohort` job row — the same way `resendInvite` inserts
+`send_email` — so there is one trigger mechanism with one auth surface, and a render on a
+cold Render instance is a queued minute rather than a minute-long request. Build the route
+only when something needs an answer synchronously, which nothing does today.
 
 All persistent state lives in Supabase; the engine host holds nothing. Moving the engine to
 another provider must stay an afternoon's work.
@@ -330,7 +352,13 @@ touching consent, retention, deletion or anything that sends data outward.
 - **`.gitattributes` forces LF.** Without it, `check-service-role.sh` authored on Windows
   fails on the Linux runner with an unreadable `\r: command not found`.
 - **Charts are hand-written SVG** in `engine/app/report/charts.py`. No plotting library —
-  the output is a hexagon and some bars, and WeasyPrint renders inline SVG well.
+  the output is a hexagon and some bars, and WeasyPrint renders inline SVG well. Both reports
+  use the same two primitives; a stacked bar was rejected for the cohort's congruence counts
+  because reading three numbers off segment widths is the colour-only signalling that file
+  refuses.
+- **`render_html`/`render_pdf` take a template and stylesheet**, defaulting to the student
+  report's. `templates/` holds two of each (`student.*`, `cohort.*`). The defaults are why
+  M11 did not touch any M9 call site.
 - **Statistical honesty (`plan.md` §9):** never print a percentage on a denominator below 10
   without the denominator beside it; never compare cohorts without both `n`s; the report says
   "classed misaligned by this instrument", never "in the wrong field".
@@ -502,6 +530,59 @@ string into visible `&lt;svg...` source on the page — it shipped once, and pas
 assertion because the words were all still there. `charts.py` escapes the values reaching it from
 outside and validates the brand hex rather than escaping it, which is what makes `|safe` correct
 here rather than a hole.
+
+## The cohort report (`engine/app/matching/cohort.py`, `engine/app/report/cohort.py`)
+
+M11. The institution's copy: what a school gets for its money, as opposed to what a student
+gets. Same split as the student report — `matching/cohort.py` is the arithmetic and is pure,
+`report/cohort.py` decides what appears on the page and is pure, `handlers/render_cohort.py`
+is the only impure part.
+
+**This document may name students, and that is not a hole in R8 — it is the other side of
+it.** R8 sends the individual report to the student and the aggregate to the institution;
+§10 then requires that aggregate to carry "named lists of students to follow up". So
+`Participant` has `full_name` where `StudentReportInput` deliberately has no flags field.
+The line that is held instead: **flag DETAIL strings never reach this document.** The
+excluded page says how many students were left out and which checks fired — codes and counts
+— and `load_cohort_report` drops the detail sentences at the loader, so no layer above can
+print "31 identical consecutive answers" beside a minor's name in a document a school files.
+An excluded student is also never on the follow-up list, which would put a flag beside a
+name by the back door.
+
+Five more things are load-bearing:
+
+- **Congruence is leave-one-out, and that is the decision the module turns on.** A student is
+  compared against the centroid of the *others* heading into their intended field. Comparing
+  them against a centroid they are inside is circular, and at n=1 it is degenerate — the
+  student is the centroid, cosine returns exactly 1.0, and the report would announce perfect
+  alignment for a field containing one person. A group of one therefore gets **no** congruence
+  figure and says so. `test_congruence_is_leave_one_out_not_self_inclusive` computes both the
+  self-inclusive and leave-one-out scores and asserts they land in different classes.
+- **§9's honesty rule is arithmetic, not a comment.** `describe_rate` returns "12 of 20 (60%)"
+  above ten and "3 of 7" below it — the percentage does not exist in the context, so no
+  template edit can print one. The template formats no percentages at all; it prints
+  `{{ rate.text }}`. A pilot field group is routinely 2 or 3 students, and "67% misaligned"
+  describing two people is the most misleading sentence this report could produce.
+- **The thresholds are printed from the constants `congruence_class` branches on**
+  (`ALIGNED_MIN`, `PARTIAL_MIN`), so the rule a reader is shown on the method page cannot
+  drift from the rule that was applied. Boundaries are inclusive at the bottom of the higher
+  class: exactly 0.60 is aligned, exactly 0.35 is partial.
+- **The completion table counts every participant on the roster**, not just the scored ones,
+  and `pending_review` is its own number rather than folded into completion (§10's v2
+  addition). A school that can see its reports are waiting on a review queue can chase a
+  psychologist; that is the one part of the delay an institution can act on.
+- **`record_cohort_report` (0011) has no R9 check and queues no email**, and both absences are
+  commented in the migration so nobody "fixes" them. R9 gates student reports only — the
+  trigger reads `NEW.kind = 'student'` — and gating cohort reports on confirmed reviews would
+  make the document unavailable to exactly the schools whose backlog it exists to show. §15
+  lists no cohort delivery template; a cohort has no single recipient, so the counsellor
+  downloads it.
+
+`interpretations.yaml`'s cohort strings live under **`report.cohort.*`**, not at top level.
+That nesting is load-bearing: `test_structural_and_attribution_text_is_written` requires every
+`report.*` key to be non-blank, and `test_the_shipped_interpretations_file_is_unwritten`
+requires the interpretive remainder to stay blank. A top-level `cohort:` block would land on
+the wrong side of both.
 
 ## The counsellor dashboard (`web/app/dash/`)
 

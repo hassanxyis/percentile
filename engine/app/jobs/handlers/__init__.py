@@ -23,7 +23,6 @@ from app.jobs.queue import Job
 # Failing with this is better than a bare KeyError: the alert then says what is
 # missing rather than that something went wrong.
 NOT_YET_IMPLEMENTED = {
-    "render_cohort": "M11",
     "recompute_norms": "M13",
 }
 
@@ -48,7 +47,7 @@ def handler_for(kind: str) -> Handler:
     # and repository, and a circular import between this registry and the
     # handlers that reference it is otherwise easy to create by accident.
     from app.jobs.handlers import email as email_handler
-    from app.jobs.handlers import match, notify, render, score
+    from app.jobs.handlers import match, notify, render, render_cohort, score
 
     registry: dict[str, Handler] = {
         "score_session": score.handle,
@@ -59,6 +58,13 @@ def handler_for(kind: str) -> Handler:
         # Enqueued only by `save_review()` on the transition into `confirmed`
         # (0009_review_actions.sql). Nothing else may queue it — R9.
         "render_student": render.handle,
+        # Enqueued by the counsellor dashboard writing a `jobs` row, the same way
+        # `resendInvite` enqueues `send_email` — not by any SQL function, and not
+        # by an HTTP call to the engine. plan §11 lists a
+        # `POST /render/cohort/{id}` route; it is deliberately unbuilt, because
+        # §2's rule is that the engine is never called synchronously from a user
+        # request and a cohort render on a cold host is a minute-long one.
+        "render_cohort": render_cohort.handle,
     }
 
     if kind in registry:
