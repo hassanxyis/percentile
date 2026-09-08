@@ -24,12 +24,28 @@ from . import harness
 # Cohort A holds Fatima (confirmed) and Hamza (scored, no review at all).
 COHORT_A = harness.COHORT_A
 
+# NOT "1.0.0", AND THE DIFFERENCE IS THE POINT.
+#
+# The seed already ships a cohort report for cohort A at template_version
+# '1.0.0' (`db/seed/demo_org.sql`). Record at that version and the function
+# finds the seed's row and takes its UPDATE branch — so a test written against
+# the default would never insert anything, and would still pass with the insert
+# branch broken. Worse, it would be testing idempotency against a row it did not
+# write.
+#
+# The failure mode these tests exist for is a worker dying between the render
+# and `complete_job`: the runner returns the job to `pending` and it runs again.
+# That sequence is insert-then-update. A version the seed does not hold is what
+# makes the first call an insert.
+SEED_TEMPLATE = "1.0.0"
+TEMPLATE = "11.0.0"
+
 
 def _record(
     conn: psycopg.Connection,
     cohort_id: str = COHORT_A,
     path: str = "demo-academy/cohort-a.pdf",
-    template_version: str = "1.0.0",
+    template_version: str = TEMPLATE,
 ) -> str:
     """Call the function as the owner — the service-role stand-in.
 
@@ -111,7 +127,19 @@ def test_recording_is_idempotent_and_returns_the_same_report(
     The runner returns a job to `pending` whenever a worker dies between the
     work and `complete_job` — the single most likely thing to happen on
     free-tier compute (0008_job_runner.sql's header).
+
+    Recorded at `TEMPLATE`, which the seed does not hold, so the first call is a
+    genuine insert and the second a genuine update. See the note on that
+    constant for why recording at the seed's version would test neither.
     """
+    with conn.cursor() as cur:
+        cur.execute(
+            "select count(*) from reports where cohort_id = %s and kind = 'cohort' "
+            "and template_version = %s",
+            (COHORT_A, TEMPLATE),
+        )
+        assert cur.fetchone()[0] == 0, "the first _record must be an insert, not an update"
+
     first = _record(conn)
     second = _record(conn, path="demo-academy/cohort-moved.pdf")
 
@@ -125,12 +153,10 @@ def test_recording_is_idempotent_and_returns_the_same_report(
 
         cur.execute(
             "select count(*) from reports where cohort_id = %s and kind = 'cohort' "
-            "and template_version = '1.0.0'",
-            (COHORT_A,),
+            "and template_version = %s",
+            (COHORT_A, TEMPLATE),
         )
-        # The seed already ships one cohort report per organisation, so this
-        # counts the seed row plus ours — not two of ours.
-        assert cur.fetchone()[0] == 2
+        assert cur.fetchone()[0] == 1, "the retry wrote a second row"
 
 
 def test_a_new_template_version_writes_a_report_beside_the_old(
@@ -143,18 +169,26 @@ def test_a_new_template_version_writes_a_report_beside_the_old(
     """
     first = _record(conn, path="demo-academy/cohort-v1.pdf")
     second = _record(
-        conn, path="demo-academy/cohort-v2.pdf", template_version="2.0.0"
+        conn, path="demo-academy/cohort-v2.pdf", template_version="11.1.0"
     )
 
     assert first != second
 
     with conn.cursor() as cur:
+        # The v1 row is the one a school already downloaded. Surviving is not
+        # enough — it has to still point at the v1 object, because a v2 render
+        # that repointed it would leave the old link serving the new document.
+        cur.execute("select storage_path from reports where id = %s", (first,))
+        assert cur.fetchone()[0] == "demo-academy/cohort-v1.pdf"
+
         cur.execute(
-            "select count(*) from reports where cohort_id = %s and kind = 'cohort'",
-            (COHORT_A,),
+            "select count(*) from reports where cohort_id = %s and kind = 'cohort' "
+            "and template_version in (%s, '11.1.0')",
+            (COHORT_A, TEMPLATE),
         )
-        # One seeded, plus the two written here.
-        assert cur.fetchone()[0] == 3
+        # Both written here. The seed's 1.0.0 row is excluded rather than counted,
+        # so this number does not move if the seed gains or loses a report.
+        assert cur.fetchone()[0] == 2
 
 
 # ── the structural differences from record_student_report ────────────────────
@@ -195,7 +229,7 @@ def test_a_cohort_report_writes_an_audit_row(conn: psycopg.Connection) -> None:
     meta = rows[-1][0]
     assert meta["kind"] == "cohort"
     assert meta["report_id"] == report_id
-    assert meta["template_version"] == "1.0.0"
+    assert meta["template_version"] == TEMPLATE
 
 
 # ── who may call it ──────────────────────────────────────────────────────────
@@ -237,7 +271,32 @@ def test_an_unknown_cohort_is_refused_by_name(conn: psycopg.Connection) -> None:
         _record(conn, cohort_id=missing)
 
 
-# ── a guard on the fixture, not on the product ───────────────────────────────
+# ── guards on the fixture, not on the product ────────────────────────────────
+
+
+def test_the_seed_holds_a_cohort_report_at_the_version_these_tests_avoid(
+    conn: psycopg.Connection,
+) -> None:
+    """A tripwire on the assumption that shapes every `_record` call above.
+
+    The seed ships cohort A a report at `SEED_TEMPLATE`. That is why `TEMPLATE`
+    exists: recording at the seed's version takes the function's UPDATE branch,
+    so the idempotency tests would never insert and would pass with the insert
+    broken. It is the mistake this file was first written with.
+
+    If a future seed change drops that row, `TEMPLATE` stops being necessary and
+    the reasoning in these tests goes stale silently. This fails instead.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "select count(*) from reports where cohort_id = %s and kind = 'cohort' "
+            "and template_version = %s",
+            (COHORT_A, SEED_TEMPLATE),
+        )
+        assert cur.fetchone()[0] == 1, (
+            "the seed no longer ships cohort A a 1.0.0 report — the TEMPLATE "
+            "constant's reason for existing has changed"
+        )
 
 
 def test_the_seed_cohort_is_too_small_for_a_percentage(
